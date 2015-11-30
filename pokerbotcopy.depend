@@ -1,0 +1,16 @@
+# depslib dependency file v1.0
+1448904297 source:c:\users\hugh\desktop\pokerbot - copy\main.cpp
+	<stdlib.h>
+	<stdio.h>
+	<time.h>
+	<cmath>
+	<iostream>
+	<sstream>
+	<iomanip>
+	<fstream>
+	<string>
+	<vector>
+	<random>
+	<chrono>
+	<windows.h>
+
