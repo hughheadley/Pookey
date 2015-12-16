@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <cmath> //pow
 #include <time.h>
-#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -19,7 +19,7 @@ using namespace std;
 #define hiddenLayerSize 4 //the number of nodes in the hidden layer of the neural network, including a bias input
 #define outputLayerSize 2 //the number of output variables in the neural network
 #define maxLayerSize 4 //the largest number of nodes in one layer
-#define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and maximumOpponentBet
+#define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and bias
 #define numberLayers 4 //one layer is added for turning the output layer into a bet
 #define familyCount 4
 #define familyMembers 10
@@ -2018,8 +2018,41 @@ int setToZero(double gameStats[familyCount * familyMembers][3])
     return 0;
 }
 
+int populateWeightsArray(int playerPosition, int refNumber, int layerSizes[numberLayers], double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+{   //populateWeightsArray fills the array containing neural network weights with the figures contained in a file, this is done for one player's weights
+    int memberNumber = refNumber % familyMembers;
+    int familyNumber = refNumber / familyMembers;
+    stringstream ss1;
+    ss1 << familyNumber;
+    string familyString = ss1.str();
+    stringstream ss2;
+    ss2 << memberNumber;
+    string memberString = ss2.str();
+    string playerFileName = "family";
+    playerFileName.append(familyString);
+    playerFileName.append("member");
+    playerFileName.append(memberString);
+    playerFileName.append(".txt");
+
+    ifstream playerWeightsFile( playerFileName.c_str() );
+    for(int i = 0; i < (numberLayers - 1); i ++)
+    {
+        for(int j = 0; j < layerSizes[i]; j ++)
+        {
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
+            {
+                playerWeightsFile >> playerWeights[playerPosition][i][j][k];
+            }
+        }
+    }
+    playerWeightsFile.close();
+
+    return 0;
+}
+
+
 int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, double maxVariableValue)
-{   //if learning from scratch create files and fill with random numbers
+{   //createGeneFiles fills weights files with random numbers
     ///For each family and player create their file and initialise the NN weights
     ///For each player in the hand open their file and import the NN weights into a matrix playerWeights
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
@@ -2029,7 +2062,8 @@ int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, doubl
     for(int i = 0; i < familyCount; i ++)
     {
         for(int j = 0; j < familyMembers; j ++)
-        {   //create a string for the file name indicating the gene's family number
+        {
+            //create a string for the file name indicating the gene's family number
             stringstream ss1;
             ss1 << i;
             string familyString = ss1.str();
@@ -2072,7 +2106,7 @@ int setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLay
     //choose how many players will play
     int numberPlayersHand = uniformPlayers(generator);
 
-    //select the players who will be playing, fill the refNumbers array with those players
+    //select the players who will be playing, fill the playerRefNumbers array with those players
     minGamesPlayed = selectPlayers(numberPlayersHand, gamesPlayed, playerRefNumbers);
 
     //select how many chips each player will have, fill chips array
@@ -2093,34 +2127,7 @@ int setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLay
     //add the players' variables to the weights array
     for(int playerCount = 0; playerCount < numberPlayersHand; playerCount ++)
     {
-        //open the gene's file to populate the playerWeights matrix
-        //calculate which member of which family the gene is from
-        memberNumber = playerRefNumbers[playerCount] % familyMembers;
-        familyNumber = playerRefNumbers[playerCount] / familyMembers;
-        stringstream ss1;
-        ss1 << familyNumber;
-        string familyString = ss1.str();
-        stringstream ss2;
-        ss2 << memberNumber;
-        string memberString = ss2.str();
-        string playerFileName = "family";
-        playerFileName.append(familyString);
-        playerFileName.append("member");
-        playerFileName.append(memberString);
-        playerFileName.append(".txt");
-        //fstream playerCoefficientsFile;
-        //PlayerCoefficientsFile.open("test.txt",fstream::out);
-        fstream playerWeightsFile( playerFileName.c_str() );
-        for(int j = 0; j < (numberLayers - 1); j ++)
-        {
-            for(int k = 0; k < layerSizes[j]; k ++)
-            {
-                for(int l = 0; l < layerSizes[j + 1]; l ++)
-                {
-                    playerWeightsFile >> playerWeights[playerCount][j][k][l];
-                }
-            }
-        }
+        populateWeightsArray(playerCount, playerRefNumbers[playerCount], layerSizes, playerWeights);
     }
 
     //fill arrays required for playing one hand
@@ -2527,37 +2534,10 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
     double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
 
     for(int playerCount = 1; playerCount < numberPlayersHand; playerCount ++)
-    {
-        //open the gene's file to populate the playerWeights matrix
-        //calculate which member of which family the gene is from
-        int memberNumber = playerRefNumbers[playerCount] % familyMembers;
-        int familyNumber = playerRefNumbers[playerCount] / familyMembers;
-        stringstream ss1;
-        ss1 << familyNumber;
-        string familyString = ss1.str();
-        stringstream ss2;
-        ss2 << memberNumber;
-        string memberString = ss2.str();
-        string playerFileName = "family";
-        playerFileName.append(familyString);
-        playerFileName.append("member");
-        playerFileName.append(memberString);
-        playerFileName.append(".txt");
-
-        ifstream playerWeightsFile( playerFileName.c_str() );
-        for(int j = 0; j < (numberLayers - 1); j ++)
-        {
-            for(int k = 0; k < layerSizes[j]; k ++)
-            {
-                for(int l = 0; l < layerSizes[j + 1]; l ++)
-                {
-                    playerWeightsFile >> playerWeights[playerCount][j][k][l];
-                }
-            }
-        }
-        playerWeightsFile.close();
+    {//populate the weights array for each player
+        populateWeightsArray(playerCount, playerRefNumbers[playerCount], layerSizes, playerWeights);
     }
-
+    cout << "playerWeights[2][1][2][0] is " << playerWeights[2][1][2][0] << endl;
 
     //create players' names for display during the game
     string playerNames[maxPlayers];
