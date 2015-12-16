@@ -717,19 +717,9 @@ int getHumanBet(int position, int maxBet, int pot, string playerNames[maxPlayers
     //request bet
     newBet = requestBet();
     betValue = newBet;
-    if(newBet == 0)
-    {    //check if player has folded or checked
-        if(bets[position] == maxBet)
-        {
-            cout << endl << playerNames[position] << " has checked" << endl;
-        }
-        else
-        {
-            cout << endl << playerNames[position] << " has folded" << endl;
-        }
-    }
-    else
-    {        //check if player cannot bet full amount
+    if(newBet != 0)
+    {   //if player has not checked/folded
+        //check if player cannot bet full amount
         if(chips[position] + bets[position] < maxBet)
         {
             //check that they have bet as much as they can
@@ -1334,7 +1324,7 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
 
 int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
-    double winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, playersActive);
+    double winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, 1); //winChance is the probability of beating one player's cards, not all players
     int newBet;
     double weights01[maxLayerSize][maxLayerSize];
     double weights12[maxLayerSize][maxLayerSize];
@@ -1398,7 +1388,7 @@ int *updateValues(int trainingMode, int position, int newBet, int maxBet, int pl
     }
 
     //if player checks
-    if((newBet == 0) && (maxBet == bets[position]))
+    if((newBet == 0) && ((maxBet == bets[position]) && (chips[position] > 0)))
     {
         if(!trainingMode)
         {
@@ -1921,18 +1911,18 @@ int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumb
                 string temp;
                 cin >> temp;
             }
-        }
-        for(int j = 0; j < maxPlayers; j ++)
-        {   //update players knocked out
-            if(chips[j] == 0)
-            {
-                playersKnockedOut[j] = 1;
+            for(int j = 0; j < maxPlayers; j ++)
+            {   //update players knocked out
+                if(chips[j] == 0)
+                {
+                    playersKnockedOut[j] = 1;
+                }
             }
-        }
-        numberPlayers = countPlayers(playersKnockedOut);
-        if((numberPlayers == 1) || ((handsPlayed == maxNumberHands) && (maxNumberHands != 0)))
-        {   //game ends if there is 1 player left or if the maximum number of hands has been played
-            gameActive = 0;
+            numberPlayers = countPlayers(playersKnockedOut);
+            if((numberPlayers == 1) || ((handsPlayed == maxNumberHands) && (maxNumberHands != 0)))
+            {   //game ends if there is 1 player left or if the maximum number of hands has been played
+                gameActive = 0;
+            }
         }
         k ++;
     }
@@ -2505,33 +2495,38 @@ int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, do
     }
 }
 
-int main()
-{
-    srand(time(NULL)); //seed srand for the deal() function
+int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manualDealing, int maxNumberHands, int layerSizes[numberLayers])
+{   //playAgainstAI puts one human player against selected AI players
+    //human player must be in position 0 of playerRefNumbers[]
+    //the first position in playerRefNumbers[] which has no player should be given a value of -1. E.g. playerRefNumbers[maxplayers] = {0,2,15,7,-1,0,0,0}; puts refs 2,15,7 against human
 
-    int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
-    double minWeightValue = -10.0, maxWeightValue = 10.0; //the range of values for which weights in the neural network can take
-    double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
-    int numberGenerations = 1, epochLength = 2;
-    float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
+    //count the number of players
+    int numberPlayersHand = 1; //initially one human player, add on players until a reference number of -1 is found
+    int initialChips = 10000;
     int bigBlind = 100;
-    int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
+    int trainingMode = 0;
+    int initialPosition = 0;
 
-    //if the algorithm is learning from scratch create the files storing player information
-    if(learnFromScratch == 1)
+    int aiPlayers[maxPlayers];
+    int playersKnockedOut[maxPlayers];
+    int chips[maxPlayers];
+
+    for(int i = 1; i < maxPlayers; i ++)
     {
-        createGeneFiles(layerSizes, minWeightValue, maxWeightValue);
+        if(playerRefNumbers[i] == -1)
+        {
+            i = maxPlayers;
+        }
+        else
+        {
+            numberPlayersHand ++;
+        }
     }
 
-    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, minWeightValue, maxWeightValue, bigBlind, minChips, maxChips, layerSizes);
-
-    ///code for playing myself against selected AI players
-    /*int numberPlayersHand = 3;
-    int playerRefNumbers[8] = {0,6,18,0,0,0,0,0};
+    //fill the weights array with each AI players' weights
     double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
 
-    for(int playerCount = 0; playerCount < numberPlayersHand; playerCount ++)
+    for(int playerCount = 1; playerCount < numberPlayersHand; playerCount ++)
     {
         //open the gene's file to populate the playerWeights matrix
         //calculate which member of which family the gene is from
@@ -2563,13 +2558,65 @@ int main()
         playerWeightsFile.close();
     }
 
-    string playerNames[8] = {"Hugh", "Ref6", "Ref18", "", "", "", "", ""};
-    int aiPlayers[8] = {0,1,1,1,1,1,1,1};
-    int playersKnockedOut[8] = {0,0,0,1,1,1,1,1};
-    int chips[8] = {10000, 10000, 10000, 0, 0, 0 , 0, 0};
 
-    playManyHands(bigBlind, 1, 0, 20, 0, playerNames, aiPlayers, chips, playersKnockedOut, playerWeights);
-    */
+    //create players' names for display during the game
+    string playerNames[maxPlayers];
+    playerNames[0] = humanName;
+    for(int i = 1; i < maxPlayers; i ++)
+    {
+        stringstream ss3;
+        ss3 << playerRefNumbers[i];
+        string refString = ss3.str();
+        string nameString = "Ref";
+        nameString.append(refString);
+        playerNames[i] = nameString;
+    }
+
+    //set playersKnockedOut, aiPlayers, chips for each player
+
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        aiPlayers[i] = 1;
+        if(i < numberPlayersHand)
+        {
+            playersKnockedOut[i] = 0;
+            chips[i] = initialChips;
+        }
+        else
+        {
+            playersKnockedOut[i] = 1;
+            chips[i] = 0;
+        }
+    }
+    aiPlayers[0] = 0; //set first player as human
+
+    playManyHands(bigBlind, manualDealing, trainingMode, maxNumberHands, initialPosition, playerNames, aiPlayers, chips, playersKnockedOut, playerWeights);
+}
+
+int main()
+{
+    srand(time(NULL)); //seed srand for the deal() function
+
+    int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
+    int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
+    double minWeightValue = -10.0, maxWeightValue = 10.0; //the range of values for which weights in the neural network can take
+    double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
+    int numberGenerations = 1, epochLength = 2;
+    float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
+    int bigBlind = 100;
+    int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
+
+
+    //if the algorithm is learning from scratch create the files storing player information
+    if(learnFromScratch == 1)
+    {
+        createGeneFiles(layerSizes, minWeightValue, maxWeightValue);
+    }
+
+    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, minWeightValue, maxWeightValue, bigBlind, minChips, maxChips, layerSizes);
+
+    int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
+    playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
     return 0;
 }
