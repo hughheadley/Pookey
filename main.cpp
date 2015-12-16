@@ -15,14 +15,14 @@
 using namespace std;
 
 #define maxPlayers 8 //the maximum number of players which can be in one game
-#define inputLayerSize 4 //the number of input variables in the neural network, including a bias input
+#define inputLayerSize 3 //the number of input variables in the neural network, including a bias input
 #define hiddenLayerSize 4 //the number of nodes in the hidden layer of the neural network, including a bias input
 #define outputLayerSize 2 //the number of output variables in the neural network
 #define maxLayerSize 4 //the largest number of nodes in one layer
 #define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and maximumOpponentBet
 #define numberLayers 4 //one layer is added for turning the output layer into a bet
 #define familyCount 4
-#define familyMembers 8
+#define familyMembers 10
 
 int sortCards(float cards[7], float suits[7])
 {   //sorts cards in descending order and sorts suits accordingly
@@ -1165,7 +1165,7 @@ float winProbChange(float communityCards[5], float communitySuits[5], int roundN
 {   //winProbChange finds how much the newest community card changes the strength of hole cards
     float strengthBefore, strengthAfter; //strength is the percent of hands which some hole cards beat. This is before and after the newest card
     float sumAbsChanges = 0; //sum of the absolute change in hand strength
-    float sumSqChanges = 0, stDevChanges; //sumsqchanges used to calculate variance of changes
+    double sumSqChanges = 0, stDevChanges; //sumsqchanges used to calculate variance of changes
     float attempts = 100; //made a float so that division can be done without truncation
     float averageChange;
     int commCards; //number of community cards present
@@ -1246,7 +1246,7 @@ float winProbChange(float communityCards[5], float communitySuits[5], int roundN
     return averageChange;
 }
 
-int oneLayerFeedForward(float currentLayerNodes[], int currentLayerSize, float nextLayerNodes[], int nextLayerSize, float weights[maxLayerSize][maxLayerSize], int applySigmoid)
+int oneLayerFeedForward(double currentLayerNodes[], int currentLayerSize, double nextLayerNodes[], int nextLayerSize, double weights[maxLayerSize][maxLayerSize], int applySigmoid)
 {   //oneLayerFeedForward calculates one layer of the neural network with the sigmoid function applied
     //nextlayernodes is modified to give the output values without an array returned
     //applysigmoid indicates if the sigmoid function is applied to the output
@@ -1270,17 +1270,21 @@ int oneLayerFeedForward(float currentLayerNodes[], int currentLayerSize, float n
     return 0;
 }
 
-int neuralNetwork(float pot, float handStrength, float callValue, float bigBlind, float weights01[maxLayerSize][maxLayerSize], float weights12[maxLayerSize][maxLayerSize])
+int neuralNetwork(double pot, double handStrength, double callValue, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
 {   //NeuralNetwork takes inputs and weights and returns the amount to bet
-    float inputLayer[inputLayerSize];
-    float hiddenLayer[hiddenLayerSize];
-    float outputLayer[outputLayerSize];
+    //weights01 is the weights for the connections between the 0th and 1st layers of the neural network
+    double inputLayer[inputLayerSize] = {0};
+    double hiddenLayer[hiddenLayerSize] = {0};
+    double outputLayer[outputLayerSize] = {0};
     int amountBet;
-    inputLayer[0] = pot / bigBlind;
-    inputLayer[1] = handStrength;
-    inputLayer[2] = 1; //bias input in neural network
+    inputLayer[0] = 1; //bias input in neural network
+    inputLayer[1] = pot / bigBlind;
+    inputLayer[2] = handStrength;
+
+    //put input variables through neural network algorithm
     oneLayerFeedForward(inputLayer, inputLayerSize, hiddenLayer, hiddenLayerSize, weights01, 1);
-    oneLayerFeedForward(hiddenLayer, hiddenLayerSize, outputLayer, outputLayerSize, weights12, 0);
+    oneLayerFeedForward(hiddenLayer, hiddenLayerSize, outputLayer, outputLayerSize, weights12, 1);
+
     //if the first output is less than 0.5 then check/fold
     if(outputLayer[0] < 0)
     {
@@ -1294,10 +1298,7 @@ int neuralNetwork(float pot, float handStrength, float callValue, float bigBlind
     //else raise
     else
     {
-        /*cout << "callvalue is " << callValue << endl;
-        cout << "bigBlind is " << bigBlind << endl;
-        cout << "outputlayer1 is " << outputLayer[1] << endl;*/
-        amountBet = callValue + (outputLayer[1] * bigBlind);
+        amountBet = callValue + (((2 * outputLayer[1]) - 1) * pot); //amount raised is between 0 and the pot
     }
 
     if(amountBet < 0)
@@ -1331,12 +1332,12 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
     return newBet;
 }
 
-int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
-    float winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, playersActive);
+    double winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, playersActive);
     int newBet;
-    float weights01[maxLayerSize][maxLayerSize];
-    float weights12[maxLayerSize][maxLayerSize];
+    double weights01[maxLayerSize][maxLayerSize];
+    double weights12[maxLayerSize][maxLayerSize];
     for(int i = 0; i < maxLayerSize; i ++)
     {
         for(int j = 0; j < maxLayerSize; j ++)
@@ -1354,7 +1355,7 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
     return newBet;
 }
 
-int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //return the new bet made by either AI or human players
     int newBet = -1;
     int callValue = maxBet - bets[position];
@@ -1382,13 +1383,12 @@ int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[m
     return newBet;
 }
 
-int *updateValues(int trainingMode, int position, int newBet, int maxBet, int playersActive, int pot, int active[maxPlayers], int chips[maxPlayers], int calls[maxPlayers], int bets[maxPlayers], int raises[maxPlayers], int folds[maxPlayers], string playerNames[maxPlayers])
+int *updateValues(int trainingMode, int position, int newBet, int maxBet, int playersActive, int pot, int active[maxPlayers], int chips[maxPlayers], int calls[maxPlayers], int bets[maxPlayers], int raises[maxPlayers], int folds[maxPlayers], string playerNames[maxPlayers], int updatedValues[3])
 {   //updateValues takes a valid new bet and the current state of the game and updates the state of the game. Integers values which aren't in an array are returned in updatedValues array "updatedValues"
-    int updatedValues[4];
 
     //if player folds
-    if((newBet == 0) && (maxBet < (bets[position] + chips[position])) && (!folds[position]))
-    {//conditions for folding: bet 0 and have enough chips to place maxBet and not be folded already
+    if((newBet == 0) && (bets[position] < maxBet) && (chips[position] > 0) && (!folds[position]))
+    {//conditions for folding: new bet of 0, having already bet less than the max bet, having some chips still to bet, and not be folded already
         if(!trainingMode)
         {
             cout << endl  << playerNames[position] << " has folded" << endl;
@@ -1447,9 +1447,8 @@ int *updateValues(int trainingMode, int position, int newBet, int maxBet, int pl
     return updatedValues;
 }
 
-int *setBlinds(int dealerPosition, int bigBlind, int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int playersKnockedOut[maxPlayers])
+int setBlinds(int dealerPosition, int bigBlind, int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int playersKnockedOut[maxPlayers], int blindInfo[3])
 {   //setBlinds finds the position of the small and big blinds and sets their bet. The positions of the blinds, the blind bets, and the pot are returned in an array
-    int blindInfo[5];
     int smallBlindPosition, bigBlindPosition;
     //find small blind position
     for(int i = (dealerPosition + 1); i < (dealerPosition + maxPlayers); i ++)
@@ -1506,13 +1505,13 @@ int *setBlinds(int dealerPosition, int bigBlind, int chips[maxPlayers], int bets
     blindInfo[1] = bigBlindPosition;
     blindInfo[2] = pot;
 
-    return blindInfo;
+    return 0;
 }
 
-int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], int chips[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], int numberPlayers, int bigBlind, int manualDealing, float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], int chips[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], int numberPlayers, int bigBlind, int manualDealing, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //playhand plays one hand of poker and modifies players' chip counts
     //If trainingMode is true then nothing is printed and there is no "enter to continue"
-    cout << endl << endl << endl << endl << "playhand begins" << endl << endl << endl << endl ;
+    ///cout << endl << endl << endl << endl << "playhand begins" << endl << endl << endl << endl ;
     int initialTotalChips = 0;
     for(int i = 0; i < maxPlayers; i++)
     {
@@ -1524,7 +1523,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     int roundActive = 1; //is the round still being played
     int maxBet = bigBlind;
     int newBet;
-    bigBlind = 2;
     int roundNumber;
     int bets[maxPlayers] = {0}, calls[maxPlayers] = {0}, raises[maxPlayers] = {0}; //amount a player has bet/called/raised
     int folds[maxPlayers] = {0}; //0 if player hasn't folded, 1 otherwise
@@ -1550,8 +1548,9 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         }
     }
 
+    int blindInfo[3];
     //set the blinds and starting position
-    int *blindInfo = setBlinds(dealerPosition, bigBlind, chips, bets, calls, playersKnockedOut);
+    setBlinds(dealerPosition, bigBlind, chips, bets, calls, playersKnockedOut, blindInfo);
     int smallBlindPosition = blindInfo[0];
     int bigBlindPosition = blindInfo[1];
     pot = blindInfo[2];
@@ -1582,7 +1581,9 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                         {
                             cout << playerNames[k] << " your cards are:" << endl << endl;
                             showCards(k, playerCards, playerSuits);
-                            cout << "enter anything to continue" << endl;
+                            cout << "Enter anything to continue" << endl;
+                            string temp;
+                            cin >> temp;
                             cout << endl;
                         }
                     }
@@ -1598,16 +1599,16 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                 for(int k = (dealerPosition + 1); k < (maxPlayers + dealerPosition + 1); k ++)
                 {   //begin dealing from the dealer's left
                     int dealPosition = k % maxPlayers;
-                    if(!playersKnockedOut[position])
+                    if(!playersKnockedOut[dealPosition])
                     {
-                    cout << "Enter " << playerNames[dealPosition] << "'s first card" << endl;
-                    playerCards[dealPosition][0] = getCardNumber();
-                    cout << "Enter that card's suit" << endl;
-                    playerSuits[dealPosition][0] = getSuitNumber();
-                    cout << "Enter " << playerNames[dealPosition] << "'s second card" << endl;
-                    playerCards[dealPosition][1] = getCardNumber();
-                    cout << "Enter that card's suit" << endl;
-                    playerSuits[dealPosition][1] = getSuitNumber();
+                        cout << "Enter " << playerNames[dealPosition] << "'s first card" << endl;
+                        playerCards[dealPosition][0] = getCardNumber();
+                        cout << "Enter that card's suit" << endl;
+                        playerSuits[dealPosition][0] = getSuitNumber();
+                        cout << "Enter " << playerNames[dealPosition] << "'s second card" << endl;
+                        playerCards[dealPosition][1] = getCardNumber();
+                        cout << "Enter that card's suit" << endl;
+                        playerSuits[dealPosition][1] = getSuitNumber();
                     }
                 }
             }
@@ -1732,11 +1733,12 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                 }
             }
-            //update values after bet is made
-            int * updatedValues = updateValues(trainingMode, position, newBet, maxBet, playersActive, pot, active, chips, calls, bets, raises, folds, playerNames);
-            playersActive = updatedValues[0];
-            maxBet = updatedValues[1];
-            pot = updatedValues[2];
+            //update values after bet is made. playersActive, maxBet and pot are stored in the updatedInfo[3] array
+            int updatedInfo[3];
+            updateValues(trainingMode, position, newBet, maxBet, playersActive, pot, active, chips, calls, bets, raises, folds, playerNames, updatedInfo);
+            playersActive = updatedInfo[0];
+            maxBet = updatedInfo[1];
+            pot = updatedInfo[2];
 
                     /*    int totalChips = 0;
                         for(int i = 0; i < maxPlayers; i++)
@@ -1894,14 +1896,10 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     return 0;
 }
 
-int *playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumberHands, int initialPosition, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int playersKnockedOut[maxPlayers])
+int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumberHands, int initialPosition, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int playersKnockedOut[maxPlayers], double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //playManyHands plays a game of poker until maxNumberHands have been played or until there is one player remaining. The players' chips are returned
     //maxNumberHands is the number of hands played before stopping. This is set to 0 if game continues until 1 player is left
-    //initialposition is the position of the dealer in the first game
-    srand(time(NULL));
-    //open file with neural network weights for each player
-    fstream myfile ("neuralNetworkWeights.txt");
-    float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
+    //initialPosition is the position of the dealer in the first game
     int dealerPosition;
     int gameActive = 1;
     int numberPlayers = countPlayers(playersKnockedOut);
@@ -1938,7 +1936,7 @@ int *playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNum
         }
         k ++;
     }
-    return chips;
+    return 0;
 }
 
 int selectPlayers(int numberPlayersHand, int gamesPlayed[], int playerRefNumbers[])
@@ -2018,15 +2016,14 @@ int generateChips(int bigBlind, float minChips, float maxChips, int numberPlayer
     return 0;
 }
 
-int setToZero(int gamesPlayed[], float gameStats[familyCount * familyMembers][3])
-{   //setToZero makes gamesPlayed array and gameStats matrix initially full of zeroes
+int setToZero(double gameStats[familyCount * familyMembers][3])
+{   //setToZero makes the gameStats matrix initially full of zeroes
     for(int i = 0; i < (familyCount * familyMembers); i ++)
     {
-        for(int j = 0; j < 2; j ++)
+        for(int j = 0; j < 3; j ++)
         {
             gameStats[i][j] = 0;
         }
-            gamesPlayed[i] = 0;
     }
     return 0;
 }
@@ -2054,8 +2051,6 @@ int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, doubl
             playerFileName.append("member");
             playerFileName.append(memberString);
             playerFileName.append(".txt");
-            //fstream playerCoefficientsFile;
-            //PlayerCoefficientsFile.open("test.txt",fstream::out);
             ofstream playerWeightsFile( playerFileName.c_str() );
             for(int j = 0; j < (numberLayers - 1); j ++)
             {
@@ -2073,9 +2068,9 @@ int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, doubl
     return 0;
 }
 
-int *setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLayers], int playerRefNumbers[maxPlayers], int gamesPlayed[familyCount * familyMembers], int chips[maxPlayers], int aiPlayers[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLayers], int playerRefNumbers[maxPlayers], int gamesPlayed[familyCount * familyMembers], int chips[maxPlayers], int aiPlayers[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize], int gameInfo[3])
 {   //setUpGame chooses the players who will play the next game and assigned them an amount of chips. A dealer is also selected.
-    int gameInfo[3]; //gameInfo stores the number of players, the dealer's position, and the minimum number of games which players have played
+    //gameInfo stores the number of players, the dealer's position, and the minimum number of games which players have played
     int dealerPosition;
     int minGamesPlayed;
     //create random number generator for the number of players playing
@@ -2153,47 +2148,38 @@ int *setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLa
         }
     }
 
-    /*for(int i = 0; i < maxPlayers; i ++)
-    {
-        cout << "Player " << i << " chip stack is " << chips[i] << endl;
-    }*/
-
+    //store information about the game
     gameInfo[0] = dealerPosition;
     gameInfo[1] = numberPlayersHand;
     gameInfo[2] = minGamesPlayed;
-    return gameInfo;
+
+    return 0;
 }
 
-int *testGeneFitness(int minTrials, int bigBlind, float minChips, float maxChips, int layerSizes[numberLayers])
-{
+double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxChips, int layerSizes[numberLayers], double zScores[familyCount * familyMembers])
+{   //testGeneFitness puts decision makers in hands with different numbers of players and chips to estimate its average profit. the Z score of the profit is used as the gene's fitness
     int chips[maxPlayers];
     int aiPlayers[maxPlayers];
     string playerNames[maxPlayers];
     int playersKnockedOut[maxPlayers];
     int numberPlayersHand, dealerPosition;
-    float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
-    int gamesPlayed[familyCount * familyMembers];
-    float geneStats[familyCount * familyMembers][3]; //geneStats contains the sum of profit/loss, sum of square of profit/loss, and variance of profit
-    double Zscores[familyCount * familyMembers];
-    float profitProbability[familyCount * familyMembers];
+    double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
+    int gamesPlayed[familyCount * familyMembers] = {0};
+    double geneStats[familyCount * familyMembers][3]; //geneStats contains the sum of profit/loss, sum of square of profit/loss, and variance of profit
     int chipsBefore[maxPlayers];
     int playerRefNumbers[maxPlayers]; //the reference number of each player who play a given game
     int minGamesPlayed = 0; //initially no players have played, minGamesPlayed increases in the while loop
 
     //before each generation set players' geneStats to zero
-    setToZero(gamesPlayed, geneStats);
+    setToZero(geneStats);
+
     while(minGamesPlayed < minTrials)
     {
-        int *gameInfo = setUpGame(bigBlind, maxChips, minChips, layerSizes, playerRefNumbers, gamesPlayed, chips, aiPlayers, playerNames, playersKnockedOut, playerWeights);
+        int gameInfo[3];
+        setUpGame(bigBlind, maxChips, minChips, layerSizes, playerRefNumbers, gamesPlayed, chips, aiPlayers, playerNames, playersKnockedOut, playerWeights, gameInfo);
         dealerPosition = gameInfo[0];
         numberPlayersHand = gameInfo[1];
         minGamesPlayed = gameInfo[2];
-
-        cout << endl << endl << "ref numbers" << endl;
-        for(int i = 0; i < numberPlayersHand; i ++)
-        {
-            cout << "Player " << i << " refNumber " << playerRefNumbers[i] << " has chip stack " << chips[i]  << endl;
-        }
 
         for(int i = 0; i < numberPlayersHand; i ++)
         {
@@ -2202,78 +2188,387 @@ int *testGeneFitness(int minTrials, int bigBlind, float minChips, float maxChips
         }
 
         playHand(dealerPosition, 1, aiPlayers, chips, playerNames, playersKnockedOut, numberPlayersHand, bigBlind, 0, playerWeights);
-
         //calculate the profit of each player
         int playerProfit[maxPlayers];
+
         for(int i = 0; i < numberPlayersHand; i ++)
         {
             //calculate profit
             playerProfit[i] = chips[i] - chipsBefore[i];
         }
 
-        /*cout << endl << endl << "Profit" << endl;
-        for(int i = 0; i < numberPlayersHand; i ++)
-        {
-            cout << "Player " << playerRefNumbers[i] << " Profit is " << playerProfit[i]  << endl;
-        }*/
-
         //update game stats for each gene
         for(int i = 0; i < numberPlayersHand; i ++)
         {
-            geneStats[playerRefNumbers[i]][0] += playerProfit[i];
-            geneStats[playerRefNumbers[i]][1] += pow(playerProfit[i],2);
+            geneStats[playerRefNumbers[i]][0] += (playerProfit[i] / bigBlind); //profit normalised with respect to big blind is used
+            geneStats[playerRefNumbers[i]][1] += pow((playerProfit[i] / bigBlind), 2);
         }
+        ///cout << "mingamesplayed is " << minGamesPlayed << endl;
     }
+
     //calculate Z scores for each player
     for(int i = 0; i < (familyCount * familyMembers); i ++)
     {
         geneStats[i][2] = (geneStats[i][1] / gamesPlayed[i]) - pow((geneStats[i][0] / gamesPlayed[i]), 2); //calculate the variance of each gene's profit
-        Zscores[i] = (geneStats[i][0] / gamesPlayed[i]) / pow(geneStats[i][2] / gamesPlayed[i], 0.5);
+        zScores[i] = (geneStats[i][0] / gamesPlayed[i]) / pow(geneStats[i][2] / gamesPlayed[i], 0.5);
+    }
+
+    //calculate and print the geometric mean variance for each family
+    double familyVarianceProduct[familyCount];
+
+    for(int i = 0; i < familyCount; i ++)
+    {
+        familyVarianceProduct[i] = 1;
+        for(int j = 0; j < familyMembers; j ++)
+        {
+            familyVarianceProduct[i] = familyVarianceProduct[i] * geneStats[(i * familyMembers) + j][2];
+        }
+        double temp = familyMembers;
+        cout << "Family number " << i << " has a geometric mean variance of " << pow(familyVarianceProduct[i], (1 / temp)) << endl;
     }
 
     for(int i = 0; i < (familyCount * familyMembers); i++)
     {
         cout << endl;
         cout << "Player ref " << i << endl;
-        cout << "Sumprofit is " << geneStats[i][0] << endl;
-        cout << "Sumsqprofit is " << geneStats[i][1] << endl;
+        cout << "zScores is " << zScores[i] << endl;
         cout << "variance is " << geneStats[i][2] << endl;
-        cout << "zScores is " << Zscores[i] << endl;
-        cout << "sample size is " << gamesPlayed[i] << endl;
+        ///cout << "sample size is " << gamesPlayed[i] << endl;
     }
-    //create geneRanking, the gene reference numbers sorted by their Z scores
-    int *geneRanking = sortIntArrayByDouble(playerRefNumbers, Zscores, maxPlayers, 0);
-    return geneRanking;
+    return 0;
+}
+
+int sortFamilyRanks(int memberRanks[familyMembers], double allGeneFitness[familyCount * familyMembers], int familyNumber)
+{   //sortFamilyRanks puts a given family's members in order of their fitness (greatest to least)
+    //familyNumber of first family is 0
+
+    double familyGeneFitness[familyMembers];
+
+    //fill allGeneFitness with relevant figures
+    for(int i = 0; i < familyMembers; i ++)
+    {
+        familyGeneFitness[i] = allGeneFitness[(familyMembers * familyNumber) + i];
+    }
+
+    int *rankedMembers = sortIntArrayByDouble(memberRanks, familyGeneFitness, familyMembers, 0);
+
+    return 0;
+}
+
+int selectParents(int sortedMemberRanks[familyMembers], int newParents[2])
+{   //selectParents chooses which members of a family will be used as an offspring's parent
+    //the mother and father of an offspring must be different. The same parent can be used for multiple offspring
+    //Only the better half of the family may be chosen as parents, each has an equal probability of being the parent
+    int motherNumber, fatherNumber;
+    int maxParentNumber = ((familyMembers - 1) / 2);
+    if(maxParentNumber == 0)
+    {
+        cout << "Warning: there are not enough family members to select distinct parents" << endl;
+    }
+
+    //create the distribution for selecting parents
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    Sleep(1);  //pause for 1 millisecond between function calls to ensure time seed is unique
+    std::default_random_engine generator (seed);
+    std::uniform_int_distribution<int> randomParent(0, maxParentNumber);
+
+    //select mother's number
+    motherNumber = sortedMemberRanks[randomParent(generator)];
+
+    //while father's number is not unique generate a father's number
+    int fatherUnique = 0;
+    while(!fatherUnique)
+    {
+        fatherNumber = sortedMemberRanks[randomParent(generator)];
+        if(fatherNumber != motherNumber)
+        {
+            fatherUnique = 1;
+        }
+    }
+
+    newParents[0] = motherNumber;
+    newParents[1] = fatherNumber;
+
+    return 0;
+}
+
+int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNumber, int rankedMembers[familyMembers], double crossoverRate, double mutationRate, double minGeneValue, double maxGeneValue)
+{
+    double offspringWeights[numberLayers][maxLayerSize][maxLayerSize]; //weights are stored in this array and stored in file at the end
+
+    //define uniform distribution for new mutation genes
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    Sleep(1);  //pause for 1 millisecond between seeding to ensure time seeds are unique
+    std::default_random_engine generator (seed);
+    std::uniform_real_distribution<double> uniformGeneDistribution(minGeneValue, maxGeneValue);
+
+    //define distribution of genes mutating
+    unsigned seed2 = std::chrono::system_clock::now().time_since_epoch().count();
+    Sleep(1);  //pause for 1 millisecond between seeding to ensure time seeds are unique
+    std::default_random_engine generator2 (seed2);
+    std::bernoulli_distribution mutationDistribution(mutationRate);
+
+    //define distribution of gene crossover occurring
+    unsigned seed3 = std::chrono::system_clock::now().time_since_epoch().count();
+    Sleep(1);  //pause for 1 millisecond between function calls to ensure time seeds are unique
+    std::default_random_engine generator3 (seed3);
+    std::bernoulli_distribution crossoverDistribution(crossoverRate);
+
+    //select the parents of the offspring
+    int parentNumbers[2];
+    selectParents(rankedMembers, parentNumbers);
+
+    int motherNumber = parentNumbers[0];
+    int fatherNumber = parentNumbers[1];
+
+    //open mother's file and copy genes to the offspring
+    stringstream ss1;
+    ss1 << familyNumber;
+    string motherFamilyString = ss1.str();
+    stringstream ss2;
+    ss2 << motherNumber;
+    string motherMemberString = ss2.str();
+    string motherFileName = "family";
+    motherFileName.append(motherFamilyString);
+    motherFileName.append("member");
+    motherFileName.append(motherMemberString);
+    motherFileName.append(".txt");
+    ifstream motherWeightsFile( motherFileName.c_str() );
+
+    for(int i = 0; i < (numberLayers - 1); i ++)
+    {
+        for(int j = 0; j < layerSizes[i]; j ++)
+        {
+            for(int k = 0; k < layerSizes[i+1]; k ++)
+            {
+                motherWeightsFile >> offspringWeights[i][j][k];
+            }
+        }
+    }
+    motherWeightsFile.close();
+
+    //open father's file
+    stringstream ss3;
+    ss3 << familyNumber;
+    string familyString = ss3.str();
+    stringstream ss4;
+    ss4 << fatherNumber;
+    string memberString = ss4.str();
+    string fatherFileName = "family";
+    fatherFileName.append(familyString);
+    fatherFileName.append("member");
+    fatherFileName.append(memberString);
+    fatherFileName.append(".txt");
+    ifstream fatherWeightsFile( fatherFileName.c_str() );
+
+    //go through father's gene, if crossover is done then use father's gene, otherwise assign father's gene to a temp
+    for(int i = 0; i < (numberLayers - 1); i ++)
+    {
+        for(int j = 0; j < layerSizes[i]; j ++)
+        {
+            for(int k = 0; k < layerSizes[i+1]; k ++)
+            {
+                double temp;
+                if(mutationDistribution(generator2))
+                {
+                    fatherWeightsFile >> temp;
+                    offspringWeights[i][j][k] = uniformGeneDistribution(generator);;
+                    ///cout << "mutation at " << i << "," << j << "," << k << endl;
+                }
+                else
+                {
+                    if(crossoverDistribution(generator3))
+                    {
+                        fatherWeightsFile >> offspringWeights[i][j][k];
+                        ///cout << "crossover at " << i << "," << j << "," << k << endl;
+                    }
+                    else
+                    {
+                        //if not doing crossover nothing needs to be changed in the offspring's genes
+                        fatherWeightsFile >> temp;
+                        ///cout << "nothing at " << i << "," << j << "," << k << endl;
+
+                    }
+                }
+            }
+        }
+    }
+
+    //open offspring's file
+    stringstream ss5;
+    ss5 << familyNumber;
+    string offspringFamilyString = ss5.str();
+    stringstream ss6;
+    ss6 << memberNumber;
+    string offspringMemberString = ss6.str();
+    string offspringFileName = "family";
+    offspringFileName.append(offspringFamilyString);
+    offspringFileName.append("member");
+    offspringFileName.append(offspringMemberString);
+    offspringFileName.append(".txt");
+    ofstream offspringWeightsFile(offspringFileName.c_str() );
+
+    //store new offspring weights in file
+    for(int i = 0; i < (numberLayers - 1); i ++)
+    {
+        for(int j = 0; j < layerSizes[i]; j ++)
+        {
+            for(int k = 0; k < layerSizes[i+1]; k ++)
+            {
+                offspringWeightsFile << offspringWeights[i][j][k] << "\t";
+            }
+            offspringWeightsFile << "\n";
+        }
+    }
+
+    return 0;
+}
+
+int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyNumber, double crossoverRate, double mutationRate, double minGeneValue, double maxGeneValue, int layerSizes[numberLayers])
+{   //updateFamily replaces the worse half of a family with new offspring
+    int memberRanks[familyMembers];
+    for(int i = 0; i < familyMembers; i ++)
+    { //initially family members are given a rank but are not in order
+        memberRanks[i] = i;
+    }
+    sortFamilyRanks(memberRanks, allGeneFitness, familyNumber);
+
+    int maxParentNumber = ((familyMembers - 1) / 2);
+
+    //replace all family members after the maximum parent position
+    for(int i = (maxParentNumber + 1); i < familyMembers; i ++)
+    {
+        //select offspring's parents
+        int newParents[2];
+        selectParents(memberRanks, newParents);
+
+        //change the offspring's file
+        createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate, minGeneValue, maxGeneValue);
+    }
+
+    return 0;
+}
+
+int updateGenes(double allGeneFitness[familyCount * familyMembers], double crossoverRate, double mutationRates[familyCount], double minGeneValue, double maxGeneValue, int layerSizes[numberLayers])
+{   //updateGenes performs the genetic algorithm update for genes from all families
+    for(int i = 0; i < familyCount; i ++)
+    {
+        updateFamily(allGeneFitness, i, crossoverRate, mutationRates[i], minGeneValue, maxGeneValue, layerSizes);
+    }
+    return 0;
+}
+
+int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, double crossoverRate, double minMutationRate, double maxMutationRate, double minGeneValue, double maxGeneValue, int bigBlind, int minChips, int maxChips, int layerSizes[numberLayers])
+{
+    time_t  timev;
+    time(&timev);
+    cout << "Genetic algorithm start time " << timev << endl;
+
+    double zScores[familyCount * familyMembers];
+
+    //set the mutation rates of each family
+    double mutationRates[familyCount]; //the mutation rates of each family
+    for(int i = 0; i < familyCount; i ++)
+    {
+        mutationRates[i] = minMutationRate + (i * ((maxMutationRate - minMutationRate) / (familyCount - 1)));
+    }
+
+    for(int generationCount = 1; generationCount <= numberGenerations; generationCount ++)
+    {
+        cout << "Generation number " << generationCount << endl;
+        //test the Z score of long term profit for each genome
+        testGeneFitness(minTrials, bigBlind, minChips, maxChips, layerSizes, zScores);
+
+        //update each family's genes
+        updateGenes(zScores, crossoverRate, mutationRates, minGeneValue, maxGeneValue, layerSizes);
+
+        if((generationCount % epochLength) == 0)
+        {
+            //do stuff at the end of epoch
+
+            //print the time
+            time_t  timev;
+            time(&timev);
+            cout << "Seconds since epoch " << timev << endl;
+
+            //calculate average Z scores and geometric mean of variance for each family
+            double familyZscores[familyCount] = {0};
+            for(int i = 0; i < familyCount; i ++)
+            {
+                for(int j = 0; j < familyCount; j ++)
+                {
+                    familyZscores[i] += zScores[(i*familyMembers) + j];
+                }
+                cout << "family " << i << " average Z score is " << (familyZscores[i] / familyCount) << endl;
+            }
+        }
+    }
 }
 
 int main()
 {
     srand(time(NULL)); //seed srand for the deal() function
+
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
     int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
-    double minVariableValue = -1.0, maxVariableValue = 1.0; //the range of values for which weights in the neural network can take
+    double minWeightValue = -10.0, maxWeightValue = 10.0; //the range of values for which weights in the neural network can take
+    double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
+    int numberGenerations = 1, epochLength = 2;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
-    float bigBlind = 2;
+    int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
 
     //if the algorithm is learning from scratch create the files storing player information
     if(learnFromScratch == 1)
     {
-        createGeneFiles(layerSizes, minVariableValue, maxVariableValue);
+        createGeneFiles(layerSizes, minWeightValue, maxWeightValue);
     }
-    testGeneFitness(minNumberTrials, bigBlind, minChips, maxChips, layerSizes);
 
-/*
-    int numberPlayers = 2;
-    int dealerPosition = 0;
-    int manualDealing = 1;
-    string playerNames[maxPlayers] = {"Hugh", "nick", "","","","","",""};
-    int aiPlayers[maxPlayers] = {0,0,0,0,0,0,0,0};
-    int chips[maxPlayers] = {10,20,0,0,0,0,0,0};
-    int playersKnockedOut[maxPlayers] = {0,0,1,1,1,1,1,1};
-    float playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
+    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, minWeightValue, maxWeightValue, bigBlind, minChips, maxChips, layerSizes);
 
-    playHand(dealerPosition, 0, aiPlayers, chips, playerNames, playersKnockedOut, numberPlayers, bigBlind, manualDealing, playerWeights);
+    ///code for playing myself against selected AI players
+    /*int numberPlayersHand = 3;
+    int playerRefNumbers[8] = {0,6,18,0,0,0,0,0};
+    double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize];
+
+    for(int playerCount = 0; playerCount < numberPlayersHand; playerCount ++)
+    {
+        //open the gene's file to populate the playerWeights matrix
+        //calculate which member of which family the gene is from
+        int memberNumber = playerRefNumbers[playerCount] % familyMembers;
+        int familyNumber = playerRefNumbers[playerCount] / familyMembers;
+        stringstream ss1;
+        ss1 << familyNumber;
+        string familyString = ss1.str();
+        stringstream ss2;
+        ss2 << memberNumber;
+        string memberString = ss2.str();
+        string playerFileName = "family";
+        playerFileName.append(familyString);
+        playerFileName.append("member");
+        playerFileName.append(memberString);
+        playerFileName.append(".txt");
+
+        ifstream playerWeightsFile( playerFileName.c_str() );
+        for(int j = 0; j < (numberLayers - 1); j ++)
+        {
+            for(int k = 0; k < layerSizes[j]; k ++)
+            {
+                for(int l = 0; l < layerSizes[j + 1]; l ++)
+                {
+                    playerWeightsFile >> playerWeights[playerCount][j][k][l];
+                }
+            }
+        }
+        playerWeightsFile.close();
+    }
+
+    string playerNames[8] = {"Hugh", "Ref6", "Ref18", "", "", "", "", ""};
+    int aiPlayers[8] = {0,1,1,1,1,1,1,1};
+    int playersKnockedOut[8] = {0,0,0,1,1,1,1,1};
+    int chips[8] = {10000, 10000, 10000, 0, 0, 0 , 0, 0};
+
+    playManyHands(bigBlind, 1, 0, 20, 0, playerNames, aiPlayers, chips, playersKnockedOut, playerWeights);
     */
 
     return 0;
