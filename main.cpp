@@ -24,6 +24,15 @@ using namespace std;
 #define familyCount 4
 #define familyMembers 10
 
+//below are means and standard deviations for input variables which are used to normalize inputs
+#define handStrengthMean 0.429
+#define handStrengthStDev 0.168
+#define logPotMean 3.643
+#define logPotRange 6.449
+
+double sumWinProb = 0;
+double sumSqWinProb = 0;
+
 int sortCards(float cards[7], float suits[7])
 {   //sorts cards in descending order and sorts suits accordingly
     int i;
@@ -175,7 +184,7 @@ double checkFlush(float cards[7], float suits[7])
     //suits must be sorted in descending order with cards sorted accordingly
     double handScore = 0;
     double temp = 0;
-    float clubs = 0, diamonds = 0, hearts = 0, spades = 0;
+    float clubs = 0, diamonds = 0, hearts = 0, spades = 0; //number of each suit
     float flushSuit = 0;
     int j;
     for(int i = 0; i < 7; i ++)
@@ -184,23 +193,17 @@ double checkFlush(float cards[7], float suits[7])
         {
             clubs += 1;
         }
+        else if(suits[i] == 2)
+        {
+            diamonds += 1;
+        }
+        else if(suits[i] == 3)
+        {
+            hearts += 1;
+        }
         else
         {
-            if(suits[i] == 2)
-            {
-                diamonds += 1;
-            }
-            else
-            {
-                if(suits[i] == 3)
-                {
-                hearts += 1;
-                }
-                else
-                {
-                    spades += 1;
-                }
-            }
+            spades += 1;
         }
     }
     //check what suit  has flush
@@ -209,29 +212,20 @@ double checkFlush(float cards[7], float suits[7])
         handScore = 6;
         flushSuit = 1;
     }
-    else
+    else if(diamonds > 4)
     {
-        if(diamonds > 4)
-        {
-            handScore= 6;
-            flushSuit = 2;
-        }
-        else
-        {
-            if(hearts > 4)
-            {
-                handScore = 6;
-                flushSuit = 3;
-            }
-            else
-            {
-                if(spades > 4)
-                {
-                    handScore = 6;
-                    flushSuit = 4;
-                }
-            }
-        }
+        handScore= 6;
+        flushSuit = 2;
+    }
+    else if(hearts > 4)
+    {
+        handScore = 6;
+        flushSuit = 3;
+    }
+    else if(spades > 4)
+    {
+        handScore = 6;
+        flushSuit = 4;
     }
     if(handScore == 6)
     {
@@ -556,6 +550,7 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     }
     prob = (wins / attempts); //probability of beating one player
     probability = pow(prob, playersActive - 1); //probability of beating all players
+
     return probability;
 }
 
@@ -1279,6 +1274,20 @@ int oneLayerFeedForward(double currentLayerNodes[], int currentLayerSize, double
     return 0;
 }
 
+double normalizeUniformVariable(double variable, double mean, double range)
+{   //normalize a uniformly distributed variable for the neural network inputs
+    //normalized variable is in the range [-1,1]
+    double normalizedVariable = 2 * ((variable - mean) / range);
+    return normalizedVariable;
+}
+
+double normalizeNormalVariable(double variable, double mean, double stDev)
+{   //normalize a normally distributed variable for the neural network inputs
+    //normalized variable has mean 0 and stdev 1
+    double normalizedVariable = ((variable - mean) / stDev);
+    return normalizedVariable;
+}
+
 int neuralNetwork(double pot, double handStrength, double callValue, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
 {   //NeuralNetwork takes inputs and weights and returns the amount to bet
     //weights01 is the weights for the connections between the 0th and 1st layers of the neural network
@@ -1287,8 +1296,16 @@ int neuralNetwork(double pot, double handStrength, double callValue, double bigB
     double outputLayer[outputLayerSize] = {0};
     int amountBet;
     inputLayer[0] = 1; //bias input in neural network
-    inputLayer[1] = pot / bigBlind;
-    inputLayer[2] = handStrength;
+    inputLayer[1] = normalizeUniformVariable(log(pot / bigBlind), logPotMean, logPotRange);
+    inputLayer[2] = normalizeNormalVariable(handStrength, handStrengthMean, handStrengthStDev);
+
+    fstream winProbFile;
+    winProbFile.open ("winProbRecords.txt", fstream::in | fstream::out | fstream::app);
+    winProbFile << inputLayer[2] <<endl;
+
+    fstream potFile;
+    potFile.open ("relativePotRecords.txt", fstream::in | fstream::out | fstream::app);
+    potFile << inputLayer[1] <<endl;
 
     //put input variables through neural network algorithm
     oneLayerFeedForward(inputLayer, inputLayerSize, hiddenLayer, hiddenLayerSize, weights01, 1);
@@ -1344,7 +1361,6 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
 int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
     double winChance = handStrength; //winChance is the probability of beating one player's cards, not all players
-    cout << "winChance is " << winChance << endl;
     int newBet;
     double weights01[maxLayerSize][maxLayerSize];
     double weights12[maxLayerSize][maxLayerSize];
@@ -1696,22 +1712,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                 cout << endl;
             }
             newBet = 0;
-            /*cout << endl;
-            for(int i = 0; i < 8; i++)
-            {
-                cout << "bets[" << i << "] is" << bets[i] << endl;
-                cout << "chips[" << i << "] is" << chips[i] << endl;
-                cout << "calls[" << i << "] is" << calls[i] << endl;
-                cout << "raises[" << i << "] is" << raises[i] << endl;
-                cout << "folds[" << i << "] is" << folds[i] << endl;
-                cout << "active[" << i << "] is" << active[i] << endl;
-            }
-            cout << "position to play is" << position << endl;
-            cout << "playersActive is" << playersActive << endl;
-            cout << "maxBet is" << maxBet << endl;
-            cout << "bets is" << bets[position] << endl;
-            cout << "smallBlindPosition is" << smallBlindPosition << endl;
-            cout << "bigBlindPosition is" << bigBlindPosition << endl;*/
+
             //check if round is over. Round ends if there is 1 player or if a player who has acted already has nothing to call
             if((playersActive == 1) || (active[position] && (bets[position] == maxBet)))
             {
@@ -1739,8 +1740,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     else
                     {
                         double handStrength = handStrengths[position];
-                        cout << "position is " << position << endl;
-                        cout << "handstrength before newbet is " << handStrength << endl;
                         newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
                     }
                 }
@@ -1751,56 +1750,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             playersActive = updatedInfo[0];
             maxBet = updatedInfo[1];
             pot = updatedInfo[2];
-
-                    /*    int totalChips = 0;
-                        for(int i = 0; i < maxPlayers; i++)
-                        {
-                            totalChips += chips[i];
-                        }
-                        int totalBets = 0;
-                        for(int i = 0; i < maxPlayers; i++)
-                        {
-                            totalBets += bets[i];
-                        }
-
-                        if((totalChips + totalBets) != initialTotalChips)
-                        {
-                            cout << "Total Chips and bets do not sum to initial total chips" << endl;
-                            cout << "position is " << position << endl;
-                            cout << "totalChips is " << totalChips << endl;
-                            cout << "totalBets is " << totalBets << endl;
-                            cout << "initialtotalChips is " << initialTotalChips << endl;
-                            cout << "newBet is " << newBet << endl;
-                            cout << "maxBet is " << maxBet << endl;
-                            cout << "pot is " << pot << endl;
-                        }
-                        if(bets[position] != (raises[position] + calls[position]))
-                        {
-                            cout << "raises and calls don't sum to bets" << endl;
-                            cout << "position is " << position << endl;
-                            cout << "bets[position] is " << bets[position] << endl;
-                            cout << "raises[position] is " << raises[position] << endl;
-                            cout << "calls[position] is " << calls[position] << endl;
-                            cout << "newBet is " << newBet << endl;
-                            cout << "maxBet is " << maxBet << endl;
-                            cout << "pot is " << pot << endl;
-                        }
-                        for(int i = 0; i < maxPlayers; i ++)
-                        {
-                            cout << "bets[" << i << "] is" << bets[i] << endl;
-                            cout << "chips[" << i << "] is" << chips[i] << endl;
-                            cout << "calls[" << i << "] is" << calls[i] << endl;
-                            cout << "raises[" << i << "] is" << raises[i] << endl;
-                            cout << "folds[" << i << "] is" << folds[i] << endl;
-                            cout << "active[" << i << "] is" << active[i] << endl;
-                        }
-                        if( (bets[position] != (raises[position] + calls[position])) ||
-                            ((totalChips + totalBets) != initialTotalChips)
-                        )
-                        {
-                            int temp;
-                            cin >> temp;
-                        }*/
 
             position = (position + 1) % maxPlayers;
         } //while(roundactive) loop end
@@ -2245,11 +2194,12 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
 
     for(int i = 0; i < (familyCount * familyMembers); i++)
     {
+        /*
         cout << endl;
         cout << "Player ref " << i << endl;
         cout << "zScores is " << zScores[i] << endl;
         cout << "variance is " << geneStats[i][2] << endl;
-        ///cout << "sample size is " << gamesPlayed[i] << endl;
+        ///cout << "sample size is " << gamesPlayed[i] << endl;*/
     }
     return 0;
 }
@@ -2619,21 +2569,8 @@ int main()
     int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
     playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
-    float holeCards[2] = {14,14};
-    float holeSuits[2] = {1, 2};
-    float communityCards[5] = {0};
-    float communitySuits[5] = {0};
-    int roundNumber = 1;
-    int folds[maxPlayers] = {0};
 
-    double handStrengths[maxPlayers] = {0};
-
-    ///getHandStrengths(handStrengths, roundNumber, folds, holeCards, holeSuits, communityCards, communitySuits);
-
-    for(int i = 0; i < maxPlayers; i ++)
-    {
-        ///cout << "handStrengths are " << handStrengths[i] << endl;
-    }
-
+    cout << "sumWinProb is " << sumWinProb << endl;
+    cout << "sumSqWinProb is " << sumSqWinProb << endl;
     return 0;
 }
