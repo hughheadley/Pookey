@@ -470,15 +470,15 @@ int countPlayers(int playersKnockedOut[maxPlayers])
     return numberPlayers;
 }
 
-float winProb(float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], float playersActive)
+double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], double playersActive)
 {   //winProb calculates the probability that the set of cards will beat all remaining players assuming those players have random hands
     //community cards are 0,0 if not yet dealt
-    float probability, prob; //prob is the chance of beating one player, probability is the chance of being all players
+    double probability, prob; //prob is the chance of beating one player, probability is the chance of being all players
     float wins = 0;
     double myHandValue = 0, oppHandValue = 0; //this hand's and the opponent's hand's value
     float attempts = 9000; //attempts should be 9000 to be 95% sure that the sample average is less than 0.5% away from the true average
+    int commCards; //the number of Community Cards;
     float deal[2];
-    int commCards; // the number of community cards
     float oppCards[7], oppSuits[7]; //opponent's cards and suits
     float existingCards[9], existingSuits[9]; //limited to 5 community cards, my cards and opponent's cards
     float myCards[7], mySuits[7]; //the cards of the player who's winprob is being calculated (including community cards)
@@ -557,6 +557,25 @@ float winProb(float holeCards[2], float holeSuits[2], float communityCards[5], f
     prob = (wins / attempts); //probability of beating one player
     probability = pow(prob, playersActive - 1); //probability of beating all players
     return probability;
+}
+
+int getHandStrengths(double handStrengths[maxPlayers], int roundNumber, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5])
+{
+    float holeCards[2];
+    float holeSuits[2];
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        if(!folds[i])
+        {
+            holeCards[0] = playerCards[i][0];
+            holeCards[1] = playerCards[i][1];
+            holeSuits[0] = playerSuits[i][0];
+            holeSuits[1] = playerSuits[i][1];
+
+            handStrengths[i] = winProb(holeCards, holeSuits, communityCards, communitySuits, 2);
+        }
+    }
+    return 0;
 }
 
 int printInfo(int playersKnockedOut[maxPlayers], int startPosition, string playerNames[maxPlayers], int chips[maxPlayers], int aiPlayers[maxPlayers])
@@ -1299,9 +1318,9 @@ int neuralNetwork(double pot, double handStrength, double callValue, double bigB
     return amountBet;
 }
 
-int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive)
+int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive)
 {   //simpleDecision returns a bet based on hand strength only
-    float winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, playersActive);
+    float winChance = handStrength; //chance of winning against one other player
     int newBet;
     if(winChance < 0.1)
     {
@@ -1322,9 +1341,10 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
     return newBet;
 }
 
-int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
-    double winChance = winProb(holeCards, holeSuits, communityCards, communitySuits, 1); //winChance is the probability of beating one player's cards, not all players
+    double winChance = handStrength; //winChance is the probability of beating one player's cards, not all players
+    cout << "winChance is " << winChance << endl;
     int newBet;
     double weights01[maxLayerSize][maxLayerSize];
     double weights12[maxLayerSize][maxLayerSize];
@@ -1345,7 +1365,7 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
     return newBet;
 }
 
-int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //return the new bet made by either AI or human players
     int newBet = -1;
     int callValue = maxBet - bets[position];
@@ -1356,8 +1376,8 @@ int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[m
     //if it is an AI player then use decision algorithm
     if(aiPlayers[position] == 1)
     {
-        //newBet = simpleDecision(position, callValue, chips[position], pot, bigBlind, calls, raises, holeCards, holeSuits, communityCards, communitySuits, playersActive);
-        newBet = decision(position, callValue, chips[position], pot, bigBlind, calls, raises, holeCards, holeSuits, communityCards, communitySuits, playersActive, playerWeights);
+        //newBet = simpleDecision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, playersActive);
+        newBet = decision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, playersActive, playerWeights);
     }
     else
     {
@@ -1500,8 +1520,7 @@ int setBlinds(int dealerPosition, int bigBlind, int chips[maxPlayers], int bets[
 
 int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], int chips[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], int numberPlayers, int bigBlind, int manualDealing, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //playhand plays one hand of poker and modifies players' chip counts
-    //If trainingMode is true then nothing is printed and there is no "enter to continue"
-    ///cout << endl << endl << endl << endl << "playhand begins" << endl << endl << endl << endl ;
+    //If trainingMode is true then nothing is printed and there are no "enter anything to continue" prompts
     int initialTotalChips = 0;
     for(int i = 0; i < maxPlayers; i++)
     {
@@ -1524,6 +1543,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     float communityCards[5] = {0}; //value of the cards which every player can use
     float communitySuits[5] = {0}; //value of the suits which every player can use
     float holeCards[2], holeSuits[2]; //cards and suits of a given player
+    double handStrengths[maxPlayers];
 
     //do stuff that is needed before round 1 starts
     for(int k = 0; k < maxPlayers; k ++)
@@ -1665,6 +1685,9 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             }
         }
 
+        //calculate players' hand strengths (probability of beating one other player)
+        getHandStrengths(handStrengths, roundNumber, folds, playerCards, playerSuits, communityCards, communitySuits);
+
         //betting begins
         while(roundActive)
         {
@@ -1715,11 +1738,10 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                     else
                     {
-                        holeCards[0] = playerCards[position][0];
-                        holeCards[1] = playerCards[position][1];
-                        holeSuits[0] = playerSuits[position][0];
-                        holeSuits[1] = playerSuits[position][1];
-                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, holeCards, holeSuits, communityCards, communitySuits, playersActive, playerWeights);
+                        double handStrength = handStrengths[position];
+                        cout << "position is " << position << endl;
+                        cout << "handstrength before newbet is " << handStrength << endl;
+                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
                     }
                 }
             }
@@ -2121,9 +2143,6 @@ int setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLay
     //select a dealer
     dealerPosition = uniformDealer (generator2);
 
-    int memberNumber;
-    int familyNumber;
-
     //add the players' variables to the weights array
     for(int playerCount = 0; playerCount < numberPlayersHand; playerCount ++)
     {
@@ -2500,6 +2519,7 @@ int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, do
             }
         }
     }
+    return 0;
 }
 
 int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manualDealing, int maxNumberHands, int layerSizes[numberLayers])
@@ -2537,7 +2557,6 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
     {//populate the weights array for each player
         populateWeightsArray(playerCount, playerRefNumbers[playerCount], layerSizes, playerWeights);
     }
-    cout << "playerWeights[2][1][2][0] is " << playerWeights[2][1][2][0] << endl;
 
     //create players' names for display during the game
     string playerNames[maxPlayers];
@@ -2571,6 +2590,8 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
     aiPlayers[0] = 0; //set first player as human
 
     playManyHands(bigBlind, manualDealing, trainingMode, maxNumberHands, initialPosition, playerNames, aiPlayers, chips, playersKnockedOut, playerWeights);
+
+    return 0;
 }
 
 int main()
@@ -2597,6 +2618,22 @@ int main()
 
     int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
     playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
+
+    float holeCards[2] = {14,14};
+    float holeSuits[2] = {1, 2};
+    float communityCards[5] = {0};
+    float communitySuits[5] = {0};
+    int roundNumber = 1;
+    int folds[maxPlayers] = {0};
+
+    double handStrengths[maxPlayers] = {0};
+
+    ///getHandStrengths(handStrengths, roundNumber, folds, holeCards, holeSuits, communityCards, communitySuits);
+
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        ///cout << "handStrengths are " << handStrengths[i] << endl;
+    }
 
     return 0;
 }
