@@ -2022,14 +2022,14 @@ int populateWeightsArray(int playerPosition, int refNumber, int layerSizes[numbe
 }
 
 
-int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, double maxVariableValue)
+int createGeneFiles(int layerSizes[numberLayers])
 {   //createGeneFiles fills weights files with random numbers
     ///For each family and player create their file and initialise the NN weights
     ///For each player in the hand open their file and import the NN weights into a matrix playerWeights
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     Sleep(1);  //pause for 1 millisecond between function calls to ensure time seed is unique
     std::default_random_engine generator (seed);
-    std::uniform_real_distribution<double> uniformdistribution(minVariableValue, maxVariableValue);
+    std::normal_distribution<double> normaldistribution(0.0, 1.0);
     for(int i = 0; i < familyCount; i ++)
     {
         for(int j = 0; j < familyMembers; j ++)
@@ -2053,7 +2053,7 @@ int createGeneFiles(int layerSizes[numberLayers], double minVariableValue, doubl
                 {
                     for(int l = 0; l < layerSizes[j+1]; l ++)
                     {
-                        playerWeightsFile << uniformdistribution (generator) << "\t";
+                        playerWeightsFile << normaldistribution (generator) << "\t";
                     }
                     playerWeightsFile << "\n";
                 }
@@ -2258,15 +2258,15 @@ int selectParents(int sortedMemberRanks[familyMembers], int newParents[2])
     return 0;
 }
 
-int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNumber, int rankedMembers[familyMembers], double crossoverRate, double mutationRate, double minGeneValue, double maxGeneValue)
-{
+int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNumber, int rankedMembers[familyMembers], double crossoverRate, double mutationRate)
+{   //createOffspring takes parents genes, mixes them and adds some mutation to create a child
     double offspringWeights[numberLayers][maxLayerSize][maxLayerSize]; //weights are stored in this array and stored in file at the end
 
     //define uniform distribution for new mutation genes
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     Sleep(1);  //pause for 1 millisecond between seeding to ensure time seeds are unique
     std::default_random_engine generator (seed);
-    std::uniform_real_distribution<double> uniformGeneDistribution(minGeneValue, maxGeneValue);
+    std::normal_distribution<double> normalGeneDistribution(0.0, 1.0);
 
     //define distribution of genes mutating
     unsigned seed2 = std::chrono::system_clock::now().time_since_epoch().count();
@@ -2338,22 +2338,18 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
                 if(mutationDistribution(generator2))
                 {
                     fatherWeightsFile >> temp;
-                    offspringWeights[i][j][k] = uniformGeneDistribution(generator);;
-                    ///cout << "mutation at " << i << "," << j << "," << k << endl;
+                    offspringWeights[i][j][k] = normalGeneDistribution(generator);;
                 }
                 else
                 {
                     if(crossoverDistribution(generator3))
                     {
                         fatherWeightsFile >> offspringWeights[i][j][k];
-                        ///cout << "crossover at " << i << "," << j << "," << k << endl;
                     }
                     else
                     {
                         //if not doing crossover nothing needs to be changed in the offspring's genes
                         fatherWeightsFile >> temp;
-                        ///cout << "nothing at " << i << "," << j << "," << k << endl;
-
                     }
                 }
             }
@@ -2390,7 +2386,7 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
     return 0;
 }
 
-int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyNumber, double crossoverRate, double mutationRate, double minGeneValue, double maxGeneValue, int layerSizes[numberLayers])
+int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyNumber, double crossoverRate, double mutationRate, int layerSizes[numberLayers])
 {   //updateFamily replaces the worse half of a family with new offspring
     int memberRanks[familyMembers];
     for(int i = 0; i < familyMembers; i ++)
@@ -2409,22 +2405,22 @@ int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyN
         selectParents(memberRanks, newParents);
 
         //change the offspring's file
-        createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate, minGeneValue, maxGeneValue);
+        createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate);
     }
 
     return 0;
 }
 
-int updateGenes(double allGeneFitness[familyCount * familyMembers], double crossoverRate, double mutationRates[familyCount], double minGeneValue, double maxGeneValue, int layerSizes[numberLayers])
+int updateGenes(double allGeneFitness[familyCount * familyMembers], double crossoverRate, double mutationRates[familyCount], int layerSizes[numberLayers])
 {   //updateGenes performs the genetic algorithm update for genes from all families
     for(int i = 0; i < familyCount; i ++)
     {
-        updateFamily(allGeneFitness, i, crossoverRate, mutationRates[i], minGeneValue, maxGeneValue, layerSizes);
+        updateFamily(allGeneFitness, i, crossoverRate, mutationRates[i], layerSizes);
     }
     return 0;
 }
 
-int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, double crossoverRate, double minMutationRate, double maxMutationRate, double minGeneValue, double maxGeneValue, int bigBlind, int minChips, int maxChips, int layerSizes[numberLayers])
+int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, double crossoverRate, double minMutationRate, double maxMutationRate, int bigBlind, int minChips, int maxChips, int layerSizes[numberLayers])
 {
     time_t  timev;
     time(&timev);
@@ -2446,7 +2442,7 @@ int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, do
         testGeneFitness(minTrials, bigBlind, minChips, maxChips, layerSizes, zScores);
 
         //update each family's genes
-        updateGenes(zScores, crossoverRate, mutationRates, minGeneValue, maxGeneValue, layerSizes);
+        updateGenes(zScores, crossoverRate, mutationRates, layerSizes);
 
         if((generationCount % epochLength) == 0)
         {
@@ -2550,7 +2546,6 @@ int main()
 
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
     int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
-    double minWeightValue = -10.0, maxWeightValue = 10.0; //the range of values for which weights in the neural network can take
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 2;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
@@ -2561,10 +2556,10 @@ int main()
     //if the algorithm is learning from scratch create the files storing player information
     if(learnFromScratch == 1)
     {
-        createGeneFiles(layerSizes, minWeightValue, maxWeightValue);
+        createGeneFiles(layerSizes);
     }
 
-    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, minWeightValue, maxWeightValue, bigBlind, minChips, maxChips, layerSizes);
+    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
     int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
     playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
