@@ -30,9 +30,6 @@ using namespace std;
 #define logPotMean 3.643
 #define logPotRange 6.449
 
-double sumWinProb = 0;
-double sumSqWinProb = 0;
-
 int sortCards(float cards[7], float suits[7])
 {   //sorts cards in descending order and sorts suits accordingly
     int i;
@@ -641,8 +638,8 @@ int checkDetails(int playersKnockedOut[maxPlayers], int startPosition, string pl
     return 0;
 }
 
-int deal(int roundNumber, int numberPlayers, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
-{   //deal hole cards or community cards for this round
+int autoDeal(int roundNumber, int numberPlayers, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
+{   //autoDeal hole cards or community cards for this round
     float newCard[2] = {0,0};
     if(roundNumber == 1)
     {   //Deal two cards to each person and update existingcards[21]
@@ -1311,13 +1308,13 @@ int neuralNetwork(double pot, double handStrength, double callValue, double bigB
     oneLayerFeedForward(inputLayer, inputLayerSize, hiddenLayer, hiddenLayerSize, weights01, 1);
     oneLayerFeedForward(hiddenLayer, hiddenLayerSize, outputLayer, outputLayerSize, weights12, 1);
 
-    //if the first output is less than 0.5 then check/fold
-    if(outputLayer[0] < 0)
+    //if the first output is less than 0.5 (0 without sigmoid) then check/fold
+    if(outputLayer[0] < 0.5)
     {
         amountBet = 0;
     }
-    //else if the second output is less than 0 then call/check
-    else if(outputLayer[1] < 0)
+    //else if the second output is less than 0.5 (0 without sigmoid) then call/check
+    else if(outputLayer[1] < 0.5)
     {
         amountBet = callValue;
     }
@@ -1595,7 +1592,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         //round 1-4 begins
         if(manualDealing == 0)
         {
-            deal(roundNumber, numberPlayers, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
+            autoDeal(roundNumber, numberPlayers, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
             //tell people their cards
             if(roundNumber == 1)
             {
@@ -1717,18 +1714,12 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             if((playersActive == 1) || (active[position] && (bets[position] == maxBet)))
             {
                 roundActive = 0;
+                position = (position + maxPlayers - 1) % maxPlayers; //position must be decreased as the current position is the player who is already active
             }
             else
             {
                 //check if this player has not folded (players are folded by default if knocked out)
                 if(!folds[position]){
-                    if(!trainingMode && aiPlayers[position])
-                    {
-                        cout << "Enter anything to continue" << endl;
-                        string temp;
-                        cin >> temp;
-                        cout << endl;
-                    }
                     //check if this player cannot bet
                     if(chips[position] == 0)
                     {
@@ -1739,8 +1730,17 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                     else
                     {
+                        cout << "position before newBet is " << position << endl;
                         double handStrength = handStrengths[position];
                         newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
+                    }
+
+                    if(!trainingMode && aiPlayers[position])
+                    {
+                        cout << "Enter anything to continue" << endl;
+                        string temp;
+                        cin >> temp;
+                        cout << endl;
                     }
                 }
             }
@@ -1813,12 +1813,12 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     int sumWinnings; //amount of chips won by a player
     for(int k = 0; k < maxPlayers; k ++)
     {   //loop through all winners
-        if(!playersKnockedOut[winnerPositions[k]])
+        if(!folds[winnerPositions[k]])
         {
             sumWinnings = 0;
             int winnerBet = bets[winnerPositions[k]];
-            if(!trainingMode)
-            {
+            if(!trainingMode && (bets[winnerPositions[k] != 0))
+            {   //if the next winner has 0 bets remaining to claim profit on then do not announce them as a winner
                 cout << "The ";
                 if(k == 0)
                 {
@@ -1872,6 +1872,8 @@ int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumb
         if(!playersKnockedOut[k % maxPlayers])
         {
             dealerPosition = k % numberPlayers;
+        cout << "startdealerPosition is " << dealerPosition << endl;
+
             playHand(dealerPosition, trainingMode, aiPlayers, chips, playerNames, playersKnockedOut, numberPlayers, bigBlind, manualDealing, playerWeights);
             handsPlayed ++;
             cout << "number of hands played is " << handsPlayed << endl;
@@ -1890,12 +1892,15 @@ int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumb
                 }
             }
             numberPlayers = countPlayers(playersKnockedOut);
+            cout << "number of players is " << numberPlayers << endl;
             if((numberPlayers == 1) || ((handsPlayed == maxNumberHands) && (maxNumberHands != 0)))
             {   //game ends if there is 1 player left or if the maximum number of hands has been played
                 gameActive = 0;
             }
+            cout << "gameActive is " << gameActive << endl;
         }
         k ++;
+        cout << "end dealerPosition is " << dealerPosition << endl;
     }
     return 0;
 }
@@ -2518,7 +2523,6 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
     }
 
     //set playersKnockedOut, aiPlayers, chips for each player
-
     for(int i = 0; i < maxPlayers; i ++)
     {
         aiPlayers[i] = 1;
@@ -2544,14 +2548,13 @@ int main()
 {
     srand(time(NULL)); //seed srand for the deal() function
 
-    int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
+    int learnFromScratch = 1; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
     int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 2;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
     int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
-
 
     //if the algorithm is learning from scratch create the files storing player information
     if(learnFromScratch == 1)
@@ -2564,8 +2567,5 @@ int main()
     int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
     playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
-
-    cout << "sumWinProb is " << sumWinProb << endl;
-    cout << "sumSqWinProb is " << sumSqWinProb << endl;
     return 0;
 }
