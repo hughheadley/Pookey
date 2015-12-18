@@ -638,132 +638,6 @@ int checkDetails(int playersKnockedOut[maxPlayers], int startPosition, string pl
     return 0;
 }
 
-int autoDeal(int roundNumber, int numberPlayers, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
-{   //autoDeal hole cards or community cards for this round
-    float newCard[2] = {0,0};
-    if(roundNumber == 1)
-    {   //Deal two cards to each person and update existingcards[21]
-        for(int i = 0; i < maxPlayers; i ++)
-        {
-            if(!folds[i])
-            {
-                for(int j = 0; j < 2; j ++)
-                {
-                    dealCard(existingCards, existingSuits, newCard);
-                    playerCards[i][j] = newCard[0];
-                    playerSuits[i][j] = newCard[1];
-                    existingCards[(2 * i) + j] = newCard[0];
-                    existingSuits[(2 * i) + j] = newCard[1];
-                }
-            }
-        }
-    }
-    if(roundNumber == 2)
-    {
-        for(int i = 0; i < 3; i ++)
-        {
-            dealCard(existingCards, existingSuits, newCard);
-            communityCards[i] = newCard[0];
-            communitySuits[i] = newCard[1];
-            existingCards[(numberPlayers * 2) + i] = newCard[0];
-            existingSuits[(numberPlayers * 2) + i] = newCard[1];
-        }
-        communityCards[3] = 0;
-        communityCards[4] = 0;
-        communitySuits[3] = 0;
-        communitySuits[4] = 0;
-    }
-    if(roundNumber == 3)
-    {
-        dealCard(existingCards, existingSuits, newCard);
-        communityCards[3] = newCard[0];
-        communitySuits[3] = newCard[1];
-        existingCards[(numberPlayers * 2) + 3] = newCard[0];
-        existingSuits[(numberPlayers * 2) + 3] = newCard[1];
-        communityCards[4] = 0;
-        communitySuits[4] = 0;
-    }
-    if(roundNumber == 4)
-    {
-        dealCard(existingCards, existingSuits, newCard);
-        communityCards[4] = newCard[0];
-        communitySuits[4] = newCard[1];
-        existingCards[(numberPlayers * 2) + 4] = newCard[0];
-        existingSuits[(numberPlayers * 2) + 4] = newCard[1];
-    }
-    return 0;
-}
-
-int requestBet()
-{   //requestBet asks the player for their bet
-    int newbet;
-    string betString;
-    int validbet = 0;
-    while(!validbet)
-    {
-        cin >> betString;
-        validbet = 1; //assume bet is valid then test this
-        istringstream(betString) >> newbet; //istringstream returns 0 if string has no number. This must not be confused with a bet of 0
-        if(((newbet == 0) && (betString.at(0) != '0')) || (newbet < 0))
-        {
-            cout << "Enter a valid bet" << endl;
-            validbet = 0;
-        }
-    }
-    return newbet;
-}
-
-int getHumanBet(int position, int maxBet, int pot, string playerNames[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers])
-{   //getHumanBet asks human player for bet and validates it
-    int newBet;
-    int betValue = 0; //betValue is the bet after modified for validity, betValue is -1 if invalid
-    cout << endl << playerNames[position] << " has " << chips[position] << " chips" << " and has bet "  << bets[position] << " already" << endl;
-    cout << "The bet to match is " << maxBet << " for a pot of " << pot << endl;
-    int callValue = maxBet - bets[position];
-    if(callValue < 0)
-    {
-        callValue = 0;
-    }
-    cout << playerNames[position] << ", the call value is " << callValue << ". How much are you betting?" << endl;
-    //request bet
-    newBet = requestBet();
-    betValue = newBet;
-    if(newBet != 0)
-    {   //if player has not checked/folded
-        //check if player cannot bet full amount
-        if(chips[position] + bets[position] < maxBet)
-        {
-            //check that they have bet as much as they can
-            if(newBet < chips[position])
-            {
-                cout << "You must bet all your money or fold" << endl;
-                betValue = -1;
-            }
-        }
-        else
-        {
-            //check if bet is valid
-            if(((newBet + bets[position] >= maxBet) || (newBet == chips[position])) && (newBet <= chips[position]))
-            {
-                //if valid bet do nothing
-            }
-            else
-            {
-                betValue = -1; //bet is invalid
-                if((chips[position] > newBet) && (newBet != 0))
-                {
-                    cout << "That's not enough" << endl;
-                }
-                if((chips[position] < newBet) && (newBet != 0))
-                {
-                    cout << "That's more than your chip stack" << endl;
-                }
-            }
-        }
-    }
-    return betValue;
-}
-
 char getSuitLetter(float suitNumber)
 {   //getSuitLetter converts a suit's number to a card's suit to display
     char suit = ' ';
@@ -917,6 +791,241 @@ float getSuitNumber()
     return suitNumber;
 }
 
+int showCards(int position, float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2])
+{   //showCards prints the hole cards of a single player
+    for(int i = 0; i < 2; i++)
+    {
+        if(playerCards[position][i] != 0)
+        {
+            char temp = getSuitLetter(playerSuits[position][i]);
+            if(playerCards[position][i] > 10)
+            {
+                char temp2 = getCardLetter(playerCards[position][i]);
+                cout << temp2 << " " << temp << endl;
+            }
+            else
+            {
+                int temp2 = playerCards[position][i];
+                cout << temp2 << " " << temp << endl;
+            }
+        }
+    }
+    //end many lines so that next player can't see previous player's cards
+    cout << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl;
+    return 0;
+}
+
+int autoDeal(int roundNumber, int numberPlayers, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
+{   //autoDeal hole cards or community cards for this round
+    float newCard[2] = {0,0};
+    if(roundNumber == 1)
+    {   //Deal two cards to each person and update existingcards[21]
+        for(int i = 0; i < maxPlayers; i ++)
+        {
+            if(!folds[i])
+            {
+                for(int j = 0; j < 2; j ++)
+                {
+                    dealCard(existingCards, existingSuits, newCard);
+                    playerCards[i][j] = newCard[0];
+                    playerSuits[i][j] = newCard[1];
+                    existingCards[(2 * i) + j] = newCard[0];
+                    existingSuits[(2 * i) + j] = newCard[1];
+                }
+            }
+        }
+    }
+    if(roundNumber == 2)
+    {
+        for(int i = 0; i < 3; i ++)
+        {
+            dealCard(existingCards, existingSuits, newCard);
+            communityCards[i] = newCard[0];
+            communitySuits[i] = newCard[1];
+            existingCards[(numberPlayers * 2) + i] = newCard[0];
+            existingSuits[(numberPlayers * 2) + i] = newCard[1];
+        }
+        communityCards[3] = 0;
+        communityCards[4] = 0;
+        communitySuits[3] = 0;
+        communitySuits[4] = 0;
+    }
+    if(roundNumber == 3)
+    {
+        dealCard(existingCards, existingSuits, newCard);
+        communityCards[3] = newCard[0];
+        communitySuits[3] = newCard[1];
+        existingCards[(numberPlayers * 2) + 3] = newCard[0];
+        existingSuits[(numberPlayers * 2) + 3] = newCard[1];
+        communityCards[4] = 0;
+        communitySuits[4] = 0;
+    }
+    if(roundNumber == 4)
+    {
+        dealCard(existingCards, existingSuits, newCard);
+        communityCards[4] = newCard[0];
+        communitySuits[4] = newCard[1];
+        existingCards[(numberPlayers * 2) + 4] = newCard[0];
+        existingSuits[(numberPlayers * 2) + 4] = newCard[1];
+    }
+    return 0;
+}
+
+int deal(int roundNumber, int dealerPosition, int manualDealing, int numberPlayers, int trainingMode, int aiPlayers[maxPlayers], int playersKnockedOut[maxPlayers], string playerNames[maxPlayers], int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
+{
+    if(manualDealing == 0)
+    {
+        autoDeal(roundNumber, numberPlayers, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
+        //tell people their cards
+        if(roundNumber == 1)
+        {
+            for(int k = 0; k < maxPlayers; k ++)
+            {
+                if((aiPlayers[k] == 0) && (playersKnockedOut[k] == 0))
+                {
+                    if(!trainingMode)
+                    {
+                        cout << playerNames[k] << " your cards are:" << endl << endl;
+                        showCards(k, playerCards, playerSuits);
+                        cout << "Enter anything to continue" << endl;
+                        string temp;
+                        cin >> temp;
+                        cout << endl;
+                    }
+                }
+            }
+        }
+    }
+    if(manualDealing == 1)
+    {
+        string temp;
+        if(roundNumber == 1)
+        {
+            for(int k = (dealerPosition + 1); k < (maxPlayers + dealerPosition + 1); k ++)
+            {   //begin dealing from the dealer's left
+                int dealPosition = k % maxPlayers;
+                if(!playersKnockedOut[dealPosition])
+                {
+                    cout << "Enter " << playerNames[dealPosition] << "'s first card" << endl;
+                    playerCards[dealPosition][0] = getCardNumber();
+                    cout << "Enter that card's suit" << endl;
+                    playerSuits[dealPosition][0] = getSuitNumber();
+                    cout << "Enter " << playerNames[dealPosition] << "'s second card" << endl;
+                    playerCards[dealPosition][1] = getCardNumber();
+                    cout << "Enter that card's suit" << endl;
+                    playerSuits[dealPosition][1] = getSuitNumber();
+                }
+            }
+        }
+        if(roundNumber == 2)
+        {
+            cout << "Enter the first flop card" << endl;
+            communityCards[0] = getCardNumber();
+            cout << "Enter that card's suit" << endl;
+            communitySuits[0] = getSuitNumber();
+            cout << "Enter the second flop card" << endl;
+            communityCards[1] = getCardNumber();
+            cout << "Enter that card's suit" << endl;
+            communitySuits[1] = getSuitNumber();
+            cout << "Enter the third flop card" << endl;
+            communityCards[2] = getCardNumber();
+            cout << "Enter that card's suit" << endl;
+            communitySuits[2] = getSuitNumber();
+            communityCards[3] = 0;
+            communitySuits[3] = 0;
+            communityCards[4] = 0;
+            communitySuits[4] = 0;
+        }
+        if(roundNumber == 3)
+        {
+            cout << "Enter the turn card" << endl;
+            communityCards[3] = getCardNumber();
+            cout << "Enter that card's suit" << endl;
+            communitySuits[3] = getSuitNumber();
+            communityCards[4] = 0;
+            communitySuits[4] = 0;
+        }
+        if(roundNumber == 4)
+        {
+            cout << "Enter the river card" << endl;
+            communityCards[4] = getCardNumber();
+            cout << "Enter that card's suit" << endl;
+            communitySuits[4] = getSuitNumber();
+        }
+    }
+    return 0;
+}
+
+int requestBet()
+{   //requestBet asks the player for their bet
+    int newbet;
+    string betString;
+    int validbet = 0;
+    while(!validbet)
+    {
+        cin >> betString;
+        validbet = 1; //assume bet is valid then test this
+        istringstream(betString) >> newbet; //istringstream returns 0 if string has no number. This must not be confused with a bet of 0
+        if(((newbet == 0) && (betString.at(0) != '0')) || (newbet < 0))
+        {
+            cout << "Enter a valid bet" << endl;
+            validbet = 0;
+        }
+    }
+    return newbet;
+}
+
+int getHumanBet(int position, int maxBet, int pot, string playerNames[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers])
+{   //getHumanBet asks human player for bet and validates it
+    int newBet;
+    int betValue = 0; //betValue is the bet after modified for validity, betValue is -1 if invalid
+    cout << endl << playerNames[position] << " has " << chips[position] << " chips" << " and has bet "  << bets[position] << " already" << endl;
+    cout << "The bet to match is " << maxBet << " for a pot of " << pot << endl;
+    int callValue = maxBet - bets[position];
+    if(callValue < 0)
+    {
+        callValue = 0;
+    }
+    cout << playerNames[position] << ", the call value is " << callValue << ". How much are you betting?" << endl;
+    //request bet
+    newBet = requestBet();
+    betValue = newBet;
+    if(newBet != 0)
+    {   //if player has not checked/folded
+        //check if player cannot bet full amount
+        if(chips[position] + bets[position] < maxBet)
+        {
+            //check that they have bet as much as they can
+            if(newBet < chips[position])
+            {
+                cout << "You must bet all your money or fold" << endl;
+                betValue = -1;
+            }
+        }
+        else
+        {
+            //check if bet is valid
+            if(((newBet + bets[position] >= maxBet) || (newBet == chips[position])) && (newBet <= chips[position]))
+            {
+                //if valid bet do nothing
+            }
+            else
+            {
+                betValue = -1; //bet is invalid
+                if((chips[position] > newBet) && (newBet != 0))
+                {
+                    cout << "That's not enough" << endl;
+                }
+                if((chips[position] < newBet) && (newBet != 0))
+                {
+                    cout << "That's more than your chip stack" << endl;
+                }
+            }
+        }
+    }
+    return betValue;
+}
+
 int sortWinners(double handScores[maxPlayers], int position[maxPlayers])
 {   //sorts winners puts the positions of players in order of best to worst hands
     for(int i = 0; i < maxPlayers; i ++)
@@ -1026,30 +1135,6 @@ int findWinners(int winnerPositions[maxPlayers], float playerCards[maxPlayers][2
         }
 	}
 	sortWinners(handScores, winnerPositions);
-    return 0;
-}
-
-int showCards(int position, float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2])
-{   //showCards prints the hole cards of a single player
-    for(int i = 0; i < 2; i++)
-    {
-        if(playerCards[position][i] != 0)
-        {
-            char temp = getSuitLetter(playerSuits[position][i]);
-            if(playerCards[position][i] > 10)
-            {
-                char temp2 = getCardLetter(playerCards[position][i]);
-                cout << temp2 << " " << temp << endl;
-            }
-            else
-            {
-                int temp2 = playerCards[position][i];
-                cout << temp2 << " " << temp << endl;
-            }
-        }
-    }
-    //end many lines so that next player can't see previous player's cards
-    cout << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl << endl;
     return 0;
 }
 
@@ -1590,87 +1675,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         }
 
         //round 1-4 begins
-        if(manualDealing == 0)
-        {
-            autoDeal(roundNumber, numberPlayers, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
-            //tell people their cards
-            if(roundNumber == 1)
-            {
-                for(int k = 0; k < maxPlayers; k ++)
-                {
-                    if((aiPlayers[k] == 0) && (playersKnockedOut[k] == 0))
-                    {
-                        if(!trainingMode)
-                        {
-                            cout << playerNames[k] << " your cards are:" << endl << endl;
-                            showCards(k, playerCards, playerSuits);
-                            cout << "Enter anything to continue" << endl;
-                            string temp;
-                            cin >> temp;
-                            cout << endl;
-                        }
-                    }
-                }
-            }
-        }
-
-        if(manualDealing == 1)
-        {
-            string temp;
-            if(roundNumber == 1)
-            {
-                for(int k = (dealerPosition + 1); k < (maxPlayers + dealerPosition + 1); k ++)
-                {   //begin dealing from the dealer's left
-                    int dealPosition = k % maxPlayers;
-                    if(!playersKnockedOut[dealPosition])
-                    {
-                        cout << "Enter " << playerNames[dealPosition] << "'s first card" << endl;
-                        playerCards[dealPosition][0] = getCardNumber();
-                        cout << "Enter that card's suit" << endl;
-                        playerSuits[dealPosition][0] = getSuitNumber();
-                        cout << "Enter " << playerNames[dealPosition] << "'s second card" << endl;
-                        playerCards[dealPosition][1] = getCardNumber();
-                        cout << "Enter that card's suit" << endl;
-                        playerSuits[dealPosition][1] = getSuitNumber();
-                    }
-                }
-            }
-            if(roundNumber == 2)
-            {
-                cout << "Enter the first flop card" << endl;
-                communityCards[0] = getCardNumber();
-                cout << "Enter that card's suit" << endl;
-                communitySuits[0] = getSuitNumber();
-                cout << "Enter the second flop card" << endl;
-                communityCards[1] = getCardNumber();
-                cout << "Enter that card's suit" << endl;
-                communitySuits[1] = getSuitNumber();
-                cout << "Enter the third flop card" << endl;
-                communityCards[2] = getCardNumber();
-                cout << "Enter that card's suit" << endl;
-                communitySuits[2] = getSuitNumber();
-                communityCards[3] = 0;
-                communitySuits[3] = 0;
-                communityCards[4] = 0;
-                communitySuits[4] = 0;
-            }
-            if(roundNumber == 3)
-            {
-                cout << "Enter the turn card" << endl;
-                communityCards[3] = getCardNumber();
-                cout << "Enter that card's suit" << endl;
-                communitySuits[3] = getSuitNumber();
-                communityCards[4] = 0;
-                communitySuits[4] = 0;
-            }
-            if(roundNumber == 4)
-            {
-                cout << "Enter the river card" << endl;
-                communityCards[4] = getCardNumber();
-                cout << "Enter that card's suit" << endl;
-                communitySuits[4] = getSuitNumber();
-            }
-        }
+        deal(roundNumber, dealerPosition, manualDealing, numberPlayers, trainingMode, aiPlayers, playersKnockedOut, playerNames, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
 
         //print community cards
         if(!trainingMode)
@@ -1730,7 +1735,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                     else
                     {
-                        cout << "position before newBet is " << position << endl;
                         double handStrength = handStrengths[position];
                         newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
                     }
@@ -1817,7 +1821,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         {
             sumWinnings = 0;
             int winnerBet = bets[winnerPositions[k]];
-            if(!trainingMode && (bets[winnerPositions[k] != 0))
+            if(!trainingMode && (bets[winnerPositions[k]] != 0))
             {   //if the next winner has 0 bets remaining to claim profit on then do not announce them as a winner
                 cout << "The ";
                 if(k == 0)
@@ -1872,7 +1876,6 @@ int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumb
         if(!playersKnockedOut[k % maxPlayers])
         {
             dealerPosition = k % numberPlayers;
-        cout << "startdealerPosition is " << dealerPosition << endl;
 
             playHand(dealerPosition, trainingMode, aiPlayers, chips, playerNames, playersKnockedOut, numberPlayers, bigBlind, manualDealing, playerWeights);
             handsPlayed ++;
@@ -1892,15 +1895,12 @@ int playManyHands(int bigBlind, int manualDealing, int trainingMode, int maxNumb
                 }
             }
             numberPlayers = countPlayers(playersKnockedOut);
-            cout << "number of players is " << numberPlayers << endl;
             if((numberPlayers == 1) || ((handsPlayed == maxNumberHands) && (maxNumberHands != 0)))
             {   //game ends if there is 1 player left or if the maximum number of hands has been played
                 gameActive = 0;
             }
-            cout << "gameActive is " << gameActive << endl;
         }
         k ++;
-        cout << "end dealerPosition is " << dealerPosition << endl;
     }
     return 0;
 }
