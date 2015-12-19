@@ -31,12 +31,9 @@ using namespace std;
 #define logPotMean 3.643
 #define logPotRange 6.449
 
-//calculate winProb to within winProbAccuracy percentiles of the distribution of winProb values with a confidence level of winProbConfidence
+//calculate winProb so that its winProbConfidence confidence interval is within winProbAccuracy percentiles of its sample mean
 #define winProbAccuracy 0.05
 #define winProbConfidence 0.95
-
-double sumMinSamples = 0;
-float minSamplesCount = 0;
 
 double RationalApproximation(double t)
 {
@@ -50,6 +47,7 @@ double RationalApproximation(double t)
 
 double NormalCDFInverse(double p)
 {
+    // Abramowitz and Stegun formula 26.2.23.
     if (p <= 0.0 || p >= 1.0)
     {
         std::stringstream os;
@@ -456,7 +454,7 @@ double getHandScore(float cards[7], float suits[7])
     return handScore;
 }
 
-float dealCard(float existingCards[maxPlayers], float existingSuits[maxPlayers], float newCard[2])
+float dealCard(float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float newCard[2])
 {   //dealCard modifies newCard[2] to enter a new card and suit
     int cardIndex, cardNumber, suitNumber;
     int uniqueness = 0; //0 is not unique card, 1 is unique
@@ -470,7 +468,7 @@ float dealCard(float existingCards[maxPlayers], float existingSuits[maxPlayers],
         uniqueness = 1;
         for(int j = 0; j < 52; j ++)
         {
-            if(existingCards[j] == '/0')
+            if(existingCards[j] == 0)
             {
                 j = 52; //if all cards have been checked then end loop
             }
@@ -634,9 +632,6 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
             minSamples = winProbRequiredSamples(prob);
         }
     }
-
-    sumMinSamples += minSamples;
-    minSamplesCount ++;
 
     probability = pow(prob, playersActive - 1); //probability of beating all players
 
@@ -1464,7 +1459,8 @@ double normalizeNormalVariable(double variable, double mean, double stDev)
 
 int neuralNetwork(double pot, double handStrength, double callValue, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
 {   //NeuralNetwork takes inputs and weights and returns the amount to bet
-    //weights01 is the weights for the connections between the 0th and 1st layers of the neural network
+    //weights01 is the weights for the connections between the 0th and 1st layers of the neural
+
     double inputLayer[inputLayerSize] = {0};
     double hiddenLayer[hiddenLayerSize] = {0};
     double outputLayer[outputLayerSize] = {0};
@@ -1482,8 +1478,11 @@ int neuralNetwork(double pot, double handStrength, double callValue, double bigB
     potFile << inputLayer[1] <<endl;
 
     //put input variables through neural network algorithm
+
+
     oneLayerFeedForward(inputLayer, inputLayerSize, hiddenLayer, hiddenLayerSize, weights01, 1);
-    oneLayerFeedForward(hiddenLayer, hiddenLayerSize, outputLayer, outputLayerSize, weights12, 1);
+
+    oneLayerFeedForward(hiddenLayer, hiddenLayerSize, outputLayer, outputLayerSize, weights12, 0);
 
     //if the first output is less than 0.5 (0 without sigmoid) then check/fold
     if(outputLayer[0] < 0.5)
@@ -1546,7 +1545,9 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
             weights12[i][j] = playerWeights[position][1][i][j];
         }
     }
+
     newBet = neuralNetwork(pot, winChance, callValue, bigBlind, weights01, weights12);
+
     if(newBet > chips)
     {
         newBet = chips;
@@ -1711,11 +1712,7 @@ int setBlinds(int dealerPosition, int bigBlind, int chips[maxPlayers], int bets[
 int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], int chips[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], int numberPlayers, int bigBlind, int manualDealing, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //playhand plays one hand of poker and modifies players' chip counts
     //If trainingMode is true then nothing is printed and there are no "enter anything to continue" prompts
-    int initialTotalChips = 0;
-    for(int i = 0; i < maxPlayers; i++)
-    {
-        initialTotalChips += chips[i];
-    }
+
     int pot = 0;
     int playersActive = numberPlayers; //playersactive is number of players not folded, numberplayers is number of players not knocked out
     int position;
@@ -1799,6 +1796,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         getHandStrengths(handStrengths, roundNumber, folds, playerCards, playerSuits, communityCards, communitySuits);
 
         //betting begins
+
         while(roundActive)
         {
             if(!folds[position] && !trainingMode)
@@ -1830,7 +1828,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                         double handStrength = handStrengths[position];
                         newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
                     }
-
                     if(!trainingMode && aiPlayers[position])
                     {
                         cout << "Enter anything to continue" << endl;
@@ -1840,13 +1837,14 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                 }
             }
+
             //update values after bet is made. playersActive, maxBet and pot are stored in the updatedInfo[3] array
             int updatedInfo[3];
+
             updateValues(trainingMode, position, newBet, maxBet, playersActive, pot, active, chips, calls, bets, raises, folds, playerNames, updatedInfo);
             playersActive = updatedInfo[0];
             maxBet = updatedInfo[1];
             pot = updatedInfo[2];
-
             position = (position + 1) % maxPlayers;
         } //while(roundactive) loop end
 
@@ -1870,6 +1868,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         {
             string temp;    //this line has no use but an error occurs if it is not in place
         }
+
     }
 
     //print cards of players who are not folded
@@ -1903,6 +1902,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     }
 
     //find the winner
+
     int winnerPositions[maxPlayers];
     findWinners(winnerPositions, playerCards, playerSuits, communityCards, communitySuits, folds);
     //give chips to winner(s)
@@ -1950,6 +1950,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             cout << playerNames[k] << " has a chip stack of " << chips[k] << endl;
         }
     }
+
     return 0;
 }
 
@@ -2519,6 +2520,7 @@ int updateGenes(double allGeneFitness[familyCount * familyMembers], double cross
 
 int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, double crossoverRate, double minMutationRate, double maxMutationRate, int bigBlind, int minChips, int maxChips, int layerSizes[numberLayers])
 {
+    //print time
     time_t  timev;
     time(&timev);
     cout << "Genetic algorithm start time " << timev << endl;
@@ -2641,7 +2643,7 @@ int main()
     srand(time(NULL)); //seed srand for the deal() function
 
     int learnFromScratch = 1; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 10; //the minimum number of hands each gene must play to estimate their performance
+    int minNumberTrials = 100; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 2;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
@@ -2654,13 +2656,43 @@ int main()
         createGeneFiles(layerSizes);
     }
 
+/*
+    float newcard[2];
+    float existingcards[7]={0};
+    float existingsuits[7]={0};
+    float playercards[7] = {0};
+    float playersuits[7] = {0};
+    int numberSets = 0;
+
+    for(int i = 0; i < 1000000; i ++)
+    {
+        double handscore = 0;
+        for(int i = 0; i < 7; i++)
+        {
+            dealCard(existingcards,existingsuits,newcard);
+
+            existingcards[i] = newcard[0];
+            existingsuits[i] = newcard[1];
+            playercards[i] = newcard[0];
+            playersuits[i] = newcard[1];
+            //cout << "card " << playercards[i] << endl;
+        }
+
+        sortCards(playercards, playersuits);
+        handscore = checkTwoPair(playercards);
+        if(handscore > 0)
+        {
+            numberSets ++;
+        }
+    }
+
+    cout << "numbersets is " << numberSets << endl;
+*/
     doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
     ///int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
-    cout << "minsampleCount is " << minSamplesCount << endl;
-    cout << "sumMinsamples is " << sumMinSamples << endl;
-    cout << "average Minsamples is " << sumMinSamples / minSamplesCount << endl;
+
     return 0;
 }
 
