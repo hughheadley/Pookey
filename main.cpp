@@ -11,6 +11,7 @@
 #include <random>
 #include <chrono>
 #include <windows.h>
+#include <stdexcept>
 
 using namespace std;
 
@@ -29,6 +30,46 @@ using namespace std;
 #define handStrengthStDev 0.168
 #define logPotMean 3.643
 #define logPotRange 6.449
+
+//calculate winProb to within winProbAccuracy percentiles of the distribution of winProb values with a confidence level of winProbConfidence
+#define winProbAccuracy 0.05
+#define winProbConfidence 0.95
+
+double sumMinSamples = 0;
+float minSamplesCount = 0;
+
+double RationalApproximation(double t)
+{
+    // Abramowitz and Stegun formula 26.2.23.
+    // The absolute value of the error should be less than 4.5 e-4.
+    double c[] = {2.515517, 0.802853, 0.010328};
+    double d[] = {1.432788, 0.189269, 0.001308};
+    return t - ((c[2]*t + c[1])*t + c[0]) /
+               (((d[2]*t + d[1])*t + d[0])*t + 1.0);
+}
+
+double NormalCDFInverse(double p)
+{
+    if (p <= 0.0 || p >= 1.0)
+    {
+        std::stringstream os;
+        os << "Invalid input argument (" << p
+           << "); must be larger than 0 but less than 1.";
+        throw std::invalid_argument( os.str() );
+    }
+
+    // See article above for explanation of this section.
+    if (p < 0.5)
+    {
+        // F^-1(p) = - G^-1(p)
+        return -RationalApproximation( sqrt(-2.0*log(p)) );
+    }
+    else
+    {
+        // F^-1(p) = G^-1(1-p)
+        return RationalApproximation( sqrt(-2.0*log(1-p)) );
+    }
+}
 
 int sortCards(float cards[7], float suits[7])
 {   //sorts cards in descending order and sorts suits accordingly
@@ -460,6 +501,39 @@ int countPlayers(int playersKnockedOut[maxPlayers])
     }
     return numberPlayers;
 }
+double normZScore(double probability, double mean, double stDev)
+{   //calculate the z score for a given cumulative probability of a normal distribution
+    double standardZ = NormalCDFInverse(probability);
+    double z = (standardZ * stDev) + mean;
+    return z;
+}
+
+double normCDF(double z, double mean, double stDev)
+{   //calculate the cumulative probability for a given z score of a normal distribution
+    double standardZ = (z - mean) / stDev;
+    double cumulativeProbability = 1 / (exp((-15.565 * standardZ) + 111 * atan(0.12585 * standardZ)) + 1);
+    return cumulativeProbability;
+}
+
+double winProbRequiredSamples(double prob)
+{   //winProbRequiredSamples calculates the number of samples required to calculate the probability of cards winning to an acceptable level of accuracy
+    int requiredSamples;
+    double normalizedProb = ((prob - handStrengthMean) / handStrengthStDev);
+    //calculate the required sample size to estimate winProb to within winProbAccuracy percentiles of the distribution of winProbs. This is calculated with winProbConfidence level of confidence
+    double confidenceZScore = normZScore((1 + winProbConfidence) / 2, 0, 1);
+    double sampleMeanCDF = normCDF(normalizedProb, 0, 1);
+    if(prob < handStrengthMean)
+    {   //the maximum of the confidence interval for winProb is less than winProbAccuracy percentiles from the sample mean
+        double CImaximum = normZScore(sampleMeanCDF + winProbAccuracy, handStrengthMean, handStrengthStDev); // the minimum of the confidence interval for the sample mean
+        requiredSamples = pow(confidenceZScore * sqrt((prob) * (1 - prob)) / (CImaximum - prob), 2.0);
+    }
+    else
+    {   //the minimum of the confidence interval for winProb is less than winProbAccuracy percentiles from the sample mean
+        double CIminimum = normZScore(sampleMeanCDF - winProbAccuracy, handStrengthMean, handStrengthStDev); // the maximum of the confidence interval for the sample mean
+        requiredSamples = pow(confidenceZScore * sqrt((prob) * (1 - prob)) / (prob - CIminimum), 2.0);
+    }
+    return requiredSamples;
+}
 
 double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], double playersActive)
 {   //winProb calculates the probability that the set of cards will beat all remaining players assuming those players have random hands
@@ -467,7 +541,7 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     double probability, prob; //prob is the chance of beating one player, probability is the chance of being all players
     float wins = 0;
     double myHandValue = 0, oppHandValue = 0; //this hand's and the opponent's hand's value
-    float attempts = 9000; //attempts should be 9000 to be 95% sure that the sample average is less than 0.5% away from the true average
+    float samples = 0; //number of times future cards have been simulated
     int commCards; //the number of Community Cards;
     float deal[2];
     float oppCards[7], oppSuits[7]; //opponent's cards and suits
@@ -489,11 +563,15 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
         }
     }
     //commcards is the number of community cards
-    //fill in existing cards and existing suits
+    //fill in my cards&suits and existing cards&suits
     existingCards[0] = holeCards[0];
     existingSuits[0] = holeSuits[0];
     existingCards[1] = holeCards[1];
     existingSuits[1] = holeSuits[1];
+    myCards[0] = holeCards[0];
+    mySuits[0] = holeSuits[0];
+    myCards[1] = holeCards[1];
+    mySuits[1] = holeSuits[1];
 
     for(int i = 0; i < commCards; i ++)
     {
@@ -503,14 +581,15 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
         mySuits[i + 2] = commonSuits[i];
     }
 
+    //calculate minimum number of samples based off Wilson score method.
+    double confidenceZScore = normZScore(0.5 + (winProbConfidence / 2), 0, 1);
+    double confidenceMaximum = normZScore(winProbAccuracy, handStrengthMean, handStrengthStDev);
+    int minSamples = 1 + (pow(confidenceZScore, 2) / confidenceMaximum) - confidenceZScore;
+
     //loop for number of outcomes explored
-    for(int i = 0; i < attempts; i ++)
+    while(samples <= minSamples)
     {
-        //fill in my cards and my suits
-        myCards[0] = holeCards[0];
-        mySuits[0] = holeSuits[0];
-        myCards[1] = holeCards[1];
-        mySuits[1] = holeSuits[1];
+        samples ++;
         //generate remaining community cards
         for(int j = commCards; j < 5; j ++)
         {
@@ -531,21 +610,34 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
         oppSuits[1] = deal[1];
         existingCards[6] = deal[0];
         existingSuits[6] = deal[1];
-        //fill in my and opponent's cards
+
+        //fill in my and opponent's cards from community cards
         for(int k = 0; k < 5; k ++){
             myCards[k + 2] = commonCards[k];
             mySuits[k + 2] = commonSuits[k];
             oppCards[k + 2] = commonCards[k];
             oppSuits[k + 2] = commonSuits[k];
         }
+
+        //calculate and compare handscores
         myHandValue = getHandScore(myCards, mySuits);
         oppHandValue = getHandScore(oppCards, oppSuits);
 
         if(myHandValue > oppHandValue){
             wins ++;
         }
+
+        prob = (wins / samples); //probability of beating one player
+
+        if((samples == minSamples) && (prob != 0) && (prob != 1))
+        {
+            minSamples = winProbRequiredSamples(prob);
+        }
     }
-    prob = (wins / attempts); //probability of beating one player
+
+    sumMinSamples += minSamples;
+    minSamplesCount ++;
+
     probability = pow(prob, playersActive - 1); //probability of beating all players
 
     return probability;
@@ -1142,7 +1234,7 @@ float winnerChange(float selfCards[2], float selfSuits[2], float communityCards[
 {  //winnerChange looks at if my hand beats other hands before and after new community cards, returns how often the winner changes
     int winBefore, winAfter; //0 if they win, 1 if I win
     float changes = 0;
-    float attempts = 5000; //made a float so that division can be done without truncation
+    float samples = 5000; //made a float so that division can be done without truncation
     float averageChange;
     int commCards; //number of comm cards present
     int commCardsBefore;
@@ -1181,7 +1273,7 @@ float winnerChange(float selfCards[2], float selfSuits[2], float communityCards[
         existingCards[j] = communityCards[j];
         existingSuits[j] = communitySuits[j];
     }
-    for(int i = 0; i < attempts; i ++)
+    for(int i = 0; i < samples; i ++)
     {
         winBefore = 0;
         winAfter = 0;
@@ -1243,7 +1335,7 @@ float winnerChange(float selfCards[2], float selfSuits[2], float communityCards[
             changes ++;
         }
     }
-    averageChange = changes / attempts;
+    averageChange = changes / samples;
     return averageChange;
 }
 
@@ -1252,7 +1344,7 @@ float winProbChange(float communityCards[5], float communitySuits[5], int roundN
     float strengthBefore, strengthAfter; //strength is the percent of hands which some hole cards beat. This is before and after the newest card
     float sumAbsChanges = 0; //sum of the absolute change in hand strength
     double sumSqChanges = 0, stDevChanges; //sumsqchanges used to calculate variance of changes
-    float attempts = 100; //made a float so that division can be done without truncation
+    float samples = 100; //made a float so that division can be done without truncation
     float averageChange;
     int commCards; //number of community cards present
     int commCardsBefore;
@@ -1280,7 +1372,7 @@ float winProbChange(float communityCards[5], float communitySuits[5], int roundN
         commCards = 5;
         commCardsBefore = 4;
     }
-    for(int i = 0; i < attempts; i++)
+    for(int i = 0; i < samples; i++)
     {
         for(int j = 0; j < commCards; j++)
         {
@@ -1325,8 +1417,8 @@ float winProbChange(float communityCards[5], float communitySuits[5], int roundN
         }
         sumSqChanges = sumSqChanges + pow((strengthAfter - strengthBefore), 2);
     }
-    averageChange = sumAbsChanges / attempts;
-    stDevChanges = pow((sumSqChanges / attempts - pow(averageChange, 2)), 0.5);
+    averageChange = sumAbsChanges / samples;
+    stDevChanges = pow((sumSqChanges / samples - pow(averageChange, 2)), 0.5);
     cout << "averagechange is " << averageChange << endl;
     cout << "stdevchanges is " << stDevChanges << endl;
     return averageChange;
@@ -2549,7 +2641,7 @@ int main()
     srand(time(NULL)); //seed srand for the deal() function
 
     int learnFromScratch = 1; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
+    int minNumberTrials = 10; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 2;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
@@ -2562,10 +2654,14 @@ int main()
         createGeneFiles(layerSizes);
     }
 
-    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
+    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
-    playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
-
+    ///int playerRefNumbers[maxPlayers] = {0,13,33,39,-1,0,0,0};
+    ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
+    cout << "minsampleCount is " << minSamplesCount << endl;
+    cout << "sumMinsamples is " << sumMinSamples << endl;
+    cout << "average Minsamples is " << sumMinSamples / minSamplesCount << endl;
     return 0;
 }
+
+
