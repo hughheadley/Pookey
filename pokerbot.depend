@@ -14,7 +14,7 @@
 	<chrono>
 	<windows.h>
 
-1450357300 source:c:\users\hugh\desktop\pookey\main.cpp
+1450648081 source:c:\users\hugh\desktop\pookey\main.cpp
 	<stdlib.h>
 	<stdio.h>
 	<cmath>
@@ -28,4 +28,5 @@
 	<random>
 	<chrono>
 	<windows.h>
+	<stdexcept>
 
