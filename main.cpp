@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <cmath>
+#include <algorithm>
 #include <time.h>
 #include <iostream>
 #include <sstream>
@@ -21,7 +22,7 @@ using namespace std;
 #define outputLayerSize 2 //the number of output variables in the neural network
 #define maxLayerSize 4 //the largest number of nodes in one layer
 #define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and bias
-#define numberLayers 5 //one layer is added for turning the output layer into a bet
+#define numberLayers 4 //one layer is added for turning the output layer into a bet
 #define familyCount 4
 #define familyMembers 10
 
@@ -38,6 +39,9 @@ using namespace std;
 //calculate the family fitness rankings to geneFitnessRankingConfidence level of confidence
 #define geneFitnessRankingConfidence 0.95
 #define geneFitnessRankingAccuracy 0.125 //if geneFitnessRankingAccuracy = 0.125 the top 12.5% of members which get killed and the bottom 12.5% of members which stay alive may be mixed up
+
+unsigned int point1, point2, point3, point4, point5, point6, point7, point8;
+unsigned int step1time=0, step2time=0, step3time=0, step4time=0, step5time=0;
 
 double RationalApproximation(double t)
 {
@@ -544,6 +548,7 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     float wins = 0;
     double myHandValue = 0, oppHandValue = 0; //this hand's and the opponent's hand's value
     float samples = 0; //number of times future cards have been simulated
+    int maxSamples = 700; //the maximum number of samples which should be done before returning hand strength
     int commCards; //the number of Community Cards;
     float deal[2];
     float oppCards[7], oppSuits[7]; //opponent's cards and suits
@@ -587,6 +592,10 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     double confidenceZScore = normZScore(0.5 + (winProbConfidence / 2), 0, 1);
     double confidenceMaximum = normZScore(winProbAccuracy, handStrengthMean, handStrengthStDev);
     int minSamples = 1 + (pow(confidenceZScore, 2) / confidenceMaximum) - confidenceZScore;
+    if(minSamples > maxSamples)
+    {
+        minSamples = maxSamples;
+    }
 
     //loop for number of outcomes explored
     while(samples <= minSamples)
@@ -1717,6 +1726,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
 {   //playhand plays one hand of poker and modifies players' chip counts
     //If trainingMode is true then nothing is printed and there are no "enter anything to continue" prompts
 
+    point1 = std::chrono::system_clock::now().time_since_epoch().count();
     int pot = 0;
     int playersActive = numberPlayers; //playersactive is number of players not folded, numberplayers is number of players not knocked out
     int position;
@@ -1757,9 +1767,12 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     pot = blindInfo[2];
     position = (bigBlindPosition + 1) % maxPlayers; //betting starts from 1 after the big blind if it is the first round
 
+    point2 = std::chrono::system_clock::now().time_since_epoch().count();
+    step1time += point2 - point1;
     //begin play for the four rounds of betting
     for(roundNumber = 1; roundNumber < 5; roundNumber ++)
     {
+    point3 = std::chrono::system_clock::now().time_since_epoch().count();
         //reset activity at the start of a round
         roundActive = 1;
         for(int k = 0; k < maxPlayers; k ++)
@@ -1770,6 +1783,8 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         //round 1-4 begins
         deal(roundNumber, dealerPosition, manualDealing, numberPlayers, trainingMode, aiPlayers, playersKnockedOut, playerNames, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
 
+    point4 = std::chrono::system_clock::now().time_since_epoch().count();
+    step2time += point4 - point3;
         //print community cards
         if(!trainingMode)
         {
@@ -1799,6 +1814,8 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         //calculate players' hand strengths (probability of beating one other player)
         getHandStrengths(handStrengths, roundNumber, folds, playerCards, playerSuits, communityCards, communitySuits);
 
+    point5 = std::chrono::system_clock::now().time_since_epoch().count();
+    step3time += point5 - point4;
         //betting begins
 
         while(roundActive)
@@ -1829,8 +1846,12 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     }
                     else
                     {
+    point6 = std::chrono::system_clock::now().time_since_epoch().count();
                         double handStrength = handStrengths[position];
                         newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
+
+    point7 = std::chrono::system_clock::now().time_since_epoch().count();
+    step4time += point7 - point6;
                     }
                     if(!trainingMode && aiPlayers[position])
                     {
@@ -1870,8 +1891,9 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         }
         if(bets[bigBlindPosition] < bigBlind)
         {
-            //string temp;    //this line has no use but an error occurs if it is not in place
+            string temp;    //this line has no use but an error occurs if it is not in place
         }
+
     }
 
     //print cards of players who are not folded
@@ -1954,6 +1976,8 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         }
     }
 
+    point8 = std::chrono::system_clock::now().time_since_epoch().count();
+    step5time += point8 - point1;
     return 0;
 }
 
@@ -2122,7 +2146,6 @@ int populateWeightsArray(int playerPosition, int refNumber, int layerSizes[numbe
     return 0;
 }
 
-
 int createGeneFiles(int layerSizes[numberLayers])
 {   //createGeneFiles fills weights files with random numbers
     ///For each family and player create their file and initialise the NN weights
@@ -2163,6 +2186,7 @@ int createGeneFiles(int layerSizes[numberLayers])
     }
     return 0;
 }
+
 
 int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLayers, int familyNumber, int memberNumber)
 {   //modifyLayerSizes introduces weights for new neurons in the neural network for one chromosome. New weights have a standard normal distribution
@@ -2323,6 +2347,55 @@ int setUpGame(int bigBlind, int maxChips, int minChips, int layerSizes[numberLay
     return 0;
 }
 
+double median(double arr[], int arraySize)
+{   //calculate the median of a double array and return it
+    std::sort(&arr[0], &arr[arraySize]);
+    double median = arraySize % 2 ? arr[arraySize / 2] : (arr[arraySize / 2 - 1] + arr[arraySize / 2]) / 2;
+    return median;
+}
+
+int calcFamilyStats(double geneStats[familyCount * familyMembers][3], double zScores[familyCount * familyMembers], int generation)
+{
+    double familyVarianceProduct, familyVariance;
+
+    fstream familyStatsFile;
+    familyStatsFile.open ("familyStatsFile.txt", fstream::in | fstream::out | fstream::app);
+    familyStatsFile << generation << endl;
+
+    //calculate the geometric mean variance for each family and store it in a file "familyStatsFile"
+    for(int i = 0; i < familyCount; i ++)
+    {
+        familyVarianceProduct = 1;
+        for(int j = 0; j < familyMembers; j ++)
+        {
+            familyVarianceProduct = familyVarianceProduct * geneStats[(i * familyMembers) + j][2];
+        }
+        double temp = familyMembers;
+        familyVariance = pow(familyVarianceProduct, (1 / temp));
+
+        familyStatsFile << familyVariance << "\t";
+    }
+
+    //calculate the median z score for each family and store it in a file "familyStatsFile"
+    double medianZScore;
+    for(int i = 0; i < familyCount; i ++)
+    {
+        double familyZScores[familyMembers];
+        for(int j = 0; j < familyMembers; j ++)
+        {
+            familyZScores[j] = zScores[(i * familyMembers) + j];
+        }
+        double temp = familyMembers;
+        medianZScore = median(familyZScores, familyMembers);
+
+        familyStatsFile << medianZScore << "\t";
+    }
+
+    familyStatsFile << endl;
+
+    return 0;
+}
+
 int maxInIntArray(int arr[], int arraySize)
 {
     int maxElement = arr[0];
@@ -2374,28 +2447,7 @@ int geneFitnessMinTrials(double geneStats[familyCount * familyMembers][3], int g
 
         //calculate trials required for this family
         trialsRequired[i] = pow(rankingZScore * sqrt(2) / ((upperMean / upperStDev) - (lowerMean / lowerStDev)), 2.0);
-
-        cout << "rankingZScore: " << rankingZScore << endl;
-        cout << "figure: " << (0.5 + geneFitnessRankingAccuracy) * familyMembers - 1 << endl;
-        cout << "upperPercentileRank: " << upperPercentileRank << endl;
-        cout << "upperMemberRef: " << upperMemberRef << endl;
-        cout << "lowerPercentileRank: " << lowerPercentileRank << endl;
-        cout << "lowerMemberRef: " << lowerMemberRef << endl;
-        cout << "uppermean: " << upperMean << endl;
-        cout << "lowermean: " << lowerMean << endl;
-        cout << "upperStDev: " << upperStDev << endl;
-        cout << "lowerStDev: " << lowerStDev << endl;
-        cout << "samples: " << trialsRequired[i] << endl;
     }
-
-    fstream genestatsFile;
-    genestatsFile.open ("genestatsFile.txt", fstream::in | fstream::out | fstream::app);
-    genestatsFile << generation << endl;
-    for(int i = 0; i < familyMembers * familyCount; i ++)
-    {
-        genestatsFile << geneStats[i][0] << "\t" << gamesPlayed[i] << "\t" << geneStats[i][1] << "\t" << geneStats[i][2] << "\t" <<  endl;
-    }
-    genestatsFile << endl;
 
     //find maximum number of trials required
     int maxTrialsRequired = maxInIntArray(trialsRequired, familyCount);
@@ -2412,6 +2464,23 @@ int geneFitnessMinTrials(double geneStats[familyCount * familyMembers][3], int g
     return maxTrialsRequired;
 }
 
+int saveLatestGeneStats(double geneStats[familyCount * familyMembers][3], double zScores[familyCount * familyMembers])
+{   //save the variance and z score of the latest set of genes. Overwrite previous stats
+
+    ofstream GeneFile("LatestGeneStats.txt");
+
+    for(int i = 0; i < familyCount; i ++)
+    {
+        for(int j = 0; j < familyMembers; j ++)
+        {
+            int playerRef = (i * familyMembers) + j;
+            GeneFile << playerRef << "\t" << zScores[playerRef] << "\t" << geneStats[playerRef][2] << endl;
+        }
+    }
+
+    return 0;
+}
+
 double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxChips, int layerSizes[numberLayers], double zScores[familyCount * familyMembers], int generation)
 {   //testGeneFitness puts decision makers in hands with different numbers of players and chips to estimate its average profit. the Z score of the profit is used as the gene's fitness
     int chips[maxPlayers];
@@ -2426,11 +2495,10 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
     int playerRefNumbers[maxPlayers]; //the reference number of each player who play a given game
     int minGamesPlayed = 0; //initially no players have played, minGamesPlayed increases in the while loop
     int minTrialsNotReached = 1;
-    minTrials = 10;
+
 
     //before each generation set players' geneStats to zero
     setToZero(geneStats);
-    cout << "hi" << endl;
     while(minTrialsNotReached)
     {
         cout << "mingamesplayed: " << minGamesPlayed << endl;
@@ -2468,12 +2536,10 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
             ///cout << "mingamesplayed is " << minGamesPlayed << endl;
         }
 
-        minTrials = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
-        cout << "updatedTrials: " << minTrials << endl;
+        ///minTrials = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
         if(minTrials <= minGamesPlayed)
         {
             minTrialsNotReached = 0;
-            cout << "mintrials reached" << endl;
         }
     }
 
@@ -2487,22 +2553,12 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
     }
 
     //calculate and print the geometric mean variance for each family
-    double familyVarianceProduct[familyCount];
+    calcFamilyStats(geneStats, zScores, generation);
 
-    for(int i = 0; i < familyCount; i ++)
-    {
-        familyVarianceProduct[i] = 1;
-        for(int j = 0; j < familyMembers; j ++)
-        {
-            familyVarianceProduct[i] = familyVarianceProduct[i] * geneStats[(i * familyMembers) + j][2];
-        }
-        double temp = familyMembers;
-        cout << "Family number " << i << " has a geometric mean variance of " << pow(familyVarianceProduct[i], (1 / temp)) << endl;
-    }
+    saveLatestGeneStats(geneStats, zScores);
 
     for(int i = 0; i < (familyCount * familyMembers); i++)
     {
-
         cout << endl;
         cout << "Player ref " << i << endl;
         cout << "zScores is " << zScores[i] << endl;
@@ -2855,7 +2911,7 @@ int main()
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
     int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
-    int numberGenerations = 1, epochLength = 1;
+    int numberGenerations = 1, epochLength = 60;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
     int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
@@ -2866,9 +2922,9 @@ int main()
         createGeneFiles(layerSizes);
     }
 
-    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
+    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    ///int playerRefNumbers[maxPlayers] = {0,6,11,36,-1,0,0,0};
+    ///int playerRefNumbers[maxPlayers] = {0,2,16,-1,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
     return 0;
