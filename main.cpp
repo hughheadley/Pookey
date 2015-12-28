@@ -548,50 +548,19 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     float wins = 0;
     double myHandValue = 0, oppHandValue = 0; //this hand's and the opponent's hand's value
     float samples = 0; //number of times future cards have been simulated
-    int maxSamples = 700; //the maximum number of samples which should be done before returning hand strength
+    int maxSamples = 9000; //the maximum number of samples which should be done before returning hand strength
     int commCards; //the number of Community Cards;
     float deal[2];
-    float oppCards[7], oppSuits[7]; //opponent's cards and suits
-    float existingCards[9], existingSuits[9]; //limited to 5 community cards, my cards and opponent's cards. Other players' hole cards are unseen and so are not considered as being dealt already
-    float myCards[7], mySuits[7]; //the cards of the player whose winprob is being calculated (including community cards)
-    float commonCards[5], commonSuits[5];
-    //put community cards into new array
-    for(int i = 0; i < 5; i ++)
-    {
-        commonCards[i] = communityCards[i];
-        commonSuits[i] = communitySuits[i];
-    }
-    //determine how many community cards there are
-    for(commCards = 0; commCards < 5; commCards ++)
-    {
-        if(commonCards[commCards] == 0)
-        {
-            break;
-        }
-    }
-    //commcards is the number of community cards
-    //fill in my cards&suits and existing cards&suits
-    existingCards[0] = holeCards[0];
-    existingSuits[0] = holeSuits[0];
-    existingCards[1] = holeCards[1];
-    existingSuits[1] = holeSuits[1];
-    myCards[0] = holeCards[0];
-    mySuits[0] = holeSuits[0];
-    myCards[1] = holeCards[1];
-    mySuits[1] = holeSuits[1];
-
-    for(int i = 0; i < commCards; i ++)
-    {
-        existingCards[i + 2] = commonCards[i];
-        existingSuits[i + 2] = commonSuits[i];
-        myCards[i + 2] = commonCards[i];
-        mySuits[i + 2] = commonSuits[i];
-    }
+    float oppCards[7] = {0}, oppSuits[7] = {0}; //opponent's cards and suits
+    float existingCards[9] = {0}, existingSuits[9] = {0}; //limited to 5 community cards, my cards and opponent's cards. Other players' hole cards are unseen and so are not considered as being dealt already
+    float myCards[7] = {0}, mySuits[7] = {0}; //the cards of the player whose winprob is being calculated (including community cards)
+    float commonCards[5] = {0}, commonSuits[5] = {0};
 
     //calculate minimum number of samples based off Wilson score method.
     double confidenceZScore = normZScore(0.5 + (winProbConfidence / 2), 0, 1);
     double confidenceMaximum = normZScore(winProbAccuracy, handStrengthMean, handStrengthStDev);
     int minSamples = 1 + (pow(confidenceZScore, 2) / confidenceMaximum) - confidenceZScore;
+    minSamples = 9000;
     if(minSamples > maxSamples)
     {
         minSamples = maxSamples;
@@ -601,38 +570,109 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     while(samples <= minSamples)
     {
         samples ++;
+        //each time redefine card arrays which get altered during calculation of hand strength
+
+        //put community cards into new array
+        for(int i = 0; i < 5; i ++)
+        {
+            commonCards[i] = communityCards[i];
+            commonSuits[i] = communitySuits[i];
+        }
+
+        //determine how many community cards there are
+        for(commCards = 0; commCards < 5; commCards ++)
+        {
+            if(commonCards[commCards] == 0)
+            {
+                break;
+            }
+        }
+
+/*
+        //commcards is the number of community cards
+        cout << "commCards is " << commCards << endl;
+        cout << "enter an int" << endl;
+        int temp;
+        cin >> temp;
+        */
+
+        //fill in my cards&suits and existing cards&suits
+        for(int i = 0; i < 2; i ++)
+        {
+            existingCards[i] = holeCards[i];
+            existingSuits[i] = holeSuits[i];
+            myCards[i] = holeCards[i];
+            mySuits[i] = holeSuits[i];
+        }
+
+        for(int i = 0; i < commCards; i ++)
+        {
+            existingCards[i + 2] = commonCards[i];
+            existingSuits[i + 2] = commonSuits[i];
+            myCards[i + 2] = commonCards[i];
+            mySuits[i + 2] = commonSuits[i];
+        }
+
         //generate remaining community cards
-        for(int j = commCards; j < 5; j ++)
+        for(int i = commCards; i < 5; i ++)
         {
             dealCard(existingCards, existingSuits, deal);
-            existingCards[j + 2] = deal[0];
-            existingSuits[j + 2] = deal[1];
-            commonCards[j] = deal[0];
-            commonSuits[j] = deal[1];
+            existingCards[i + 2] = deal[0];
+            existingSuits[i + 2] = deal[1];
+            commonCards[i] = deal[0];
+            commonSuits[i] = deal[1];
+            /*
+            cout << "newly dealt card for commoncards: " << deal[0] << "-" << deal[1] << endl;
+            cout << "enter an int" << endl;
+            cin >> temp;
+            */
         }
+
         //generate opponent's cards
-        dealCard(existingCards, existingSuits, deal);
-        oppCards[0] = deal[0];
-        oppSuits[0] = deal[1];
-        existingCards[5] = deal[0];
-        existingSuits[5] = deal[1];
-        dealCard(existingCards, existingSuits, deal);
-        oppCards[1] = deal[0];
-        oppSuits[1] = deal[1];
-        existingCards[6] = deal[0];
-        existingSuits[6] = deal[1];
+        for(int i = 0; i < 2; i ++)
+        {
+            dealCard(existingCards, existingSuits, deal);
+            existingCards[i + 7] = deal[0];
+            existingSuits[i + 7] = deal[1];
+            oppCards[i] = deal[0];
+            oppSuits[i] = deal[1];
+            /*
+            cout << "newly dealt card for oppcards: " << deal[0] << "-" << deal[1] << endl;
+            cout << "enter an int" << endl;
+            cin >> temp;
+            */
+        }
 
         //fill in my and opponent's cards from community cards
-        for(int k = 0; k < 5; k ++){
-            myCards[k + 2] = commonCards[k];
-            mySuits[k + 2] = commonSuits[k];
-            oppCards[k + 2] = commonCards[k];
-            oppSuits[k + 2] = commonSuits[k];
+        for(int i = 0; i < 5; i ++){
+            myCards[i + 2] = commonCards[i];
+            mySuits[i + 2] = commonSuits[i];
+            oppCards[i + 2] = commonCards[i];
+            oppSuits[i + 2] = commonSuits[i];
         }
+
+/*
+        for(int i = 0; i < 7; i ++)
+        {
+            cout << "mycards number " << i << " is " << myCards[i] << "-" << mySuits[i] << endl;
+        }
+
+        for(int i = 0; i < 7; i ++)
+        {
+            cout << "oppcards number " << i << " is " << oppCards[i] << "-" << oppSuits[i] << endl;
+        }
+
+        for(int i = 0; i < 9; i ++)
+        {
+            cout << "existing cards number " << i << " is " << existingCards[i] << "-" << existingSuits[i] << endl;
+        }
+*/
 
         //calculate and compare handscores
         myHandValue = getHandScore(myCards, mySuits);
         oppHandValue = getHandScore(oppCards, oppSuits);
+        /*cout << "myHandValue: " << myHandValue << endl;
+        cout << "oppHandValue: " << oppHandValue << endl;*/
 
         if(myHandValue > oppHandValue){
             wins ++;
@@ -1814,8 +1854,6 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         //calculate players' hand strengths (probability of beating one other player)
         getHandStrengths(handStrengths, roundNumber, folds, playerCards, playerSuits, communityCards, communitySuits);
 
-    point5 = std::chrono::system_clock::now().time_since_epoch().count();
-    step3time += point5 - point4;
         //betting begins
 
         while(roundActive)
@@ -2922,7 +2960,15 @@ int main()
         createGeneFiles(layerSizes);
     }
 
-    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
+    float holecards[2] = {10,10};
+    float holesuits[2] = {2,3};
+    float communitycards[5] = {0,0,0,0,0};
+    float communitysuits[5] = {0,0,0,0,0};
+
+    double handStrength = winProb(holecards, holesuits, communitycards, communitysuits, 2);
+    cout << "HS is : " <<handStrength << endl;
+
+    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
     ///int playerRefNumbers[maxPlayers] = {0,2,16,-1,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
