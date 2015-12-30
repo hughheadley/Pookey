@@ -17,24 +17,26 @@
 using namespace std;
 
 #define maxPlayers 8 //the maximum number of players which can be in one game
-#define inputLayerSize 5 //the number of input variables in the neural network, including a bias input
+#define inputLayerSize 6 //the number of input variables in the neural network, including a bias input
 #define hiddenLayerSize 4 //the number of nodes in the hidden layer of the neural network, including a bias input
 #define outputLayerSize 2 //the number of output variables in the neural network, this is always 2 for deciding fold/check/call/raise and amount raised
-#define maxLayerSize 5 //the largest number of nodes in one layer
+#define maxLayerSize 6 //the largest number of nodes in one layer
 #define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and bias
 #define numberLayers 4 //one layer is added for turning the output layer into a bet
-#define familyCount 4
-#define familyMembers 10
+#define familyCount 4 //the number of families in the evolutionary algorithm
+#define familyMembers 10 //the number of members in each family in the evolutionary algorithm
 
-//below are means and standard deviations for input variables which are used to normalize inputs
-#define handStrengthMean 0.429
-#define handStrengthStDev 0.168
+//below are means and ranges for input variables which are used to normalize inputs
+#define handStrengthMean 0.475
+#define handStrengthRange 0.45
 #define logPotMean 3.643
 #define logPotRange 6.449
 #define logCallValueMean 2.284
 #define logCallValueRange 4.549
 #define logExistingBetMean 2.611
 #define logExistingBetRange 5.222
+#define roundNumberMean 2.5
+#define roundNumberRange 3
 
 //calculate winProb so that its winProbConfidence confidence interval is within winProbAccuracy percentiles of its sample mean
 #define winProbAccuracy 0.05
@@ -48,7 +50,7 @@ unsigned globalSeed = std::chrono::system_clock::now().time_since_epoch().count(
 std::default_random_engine generator (globalSeed);
 
 double RationalApproximation(double t)
-{
+{   //RationalApproximation returns a value t used in calculating the inverse of the CDF of a normal distribution
     // Abramowitz and Stegun formula 26.2.23.
     // The absolute value of the error should be less than 4.5 e-4.
     double c[] = {2.515517, 0.802853, 0.010328};
@@ -58,7 +60,7 @@ double RationalApproximation(double t)
 }
 
 double NormalCDFInverse(double p)
-{
+{   //NormalCDFInverse takes a probability and returns the z score corresponding to that probability
     // Abramowitz and Stegun formula 26.2.23.
     if (p <= 0.0 || p >= 1.0)
     {
@@ -512,6 +514,7 @@ int countPlayers(int playersKnockedOut[maxPlayers])
     }
     return numberPlayers;
 }
+
 double normZScore(double probability, double mean, double stDev)
 {   //calculate the z score for a given cumulative probability of a normal distribution
     double standardZ = NormalCDFInverse(probability);
@@ -526,10 +529,12 @@ double normCDF(double z, double mean, double stDev)
     return cumulativeProbability;
 }
 
+//winProbRequiredSamples only used in the case where handStrengths in game have a normal distribution
+/*
 double winProbRequiredSamples(double prob)
 {   //winProbRequiredSamples calculates the number of samples required to calculate the probability of cards winning to an acceptable level of accuracy
     int requiredSamples;
-    double normalizedProb = ((prob - handStrengthMean) / handStrengthStDev);
+    double normalizedProb = ((prob - handStrengthMean) / handStrengthRange);
     //calculate the required sample size to estimate winProb to within winProbAccuracy percentiles of the distribution of winProbs. This is calculated with winProbConfidence level of confidence
     double confidenceZScore = normZScore((1 + winProbConfidence) / 2, 0, 1);
     double sampleMeanCDF = normCDF(normalizedProb, 0, 1);
@@ -545,6 +550,7 @@ double winProbRequiredSamples(double prob)
     }
     return requiredSamples;
 }
+*/
 
 double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], float communitySuits[5], double playersActive)
 {   //winProb calculates the probability that the set of cards will beat all remaining players assuming those players have random hands
@@ -554,7 +560,7 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     float wins = 0;
     double myHandValue, oppHandValue; //this hand's and the opponent's hand's value
     float samples = 0; //number of times future cards have been simulated
-    int maxSamples = 700; //the maximum number of samples which should be done before returning hand strength
+    int maxSamples = 400; //the maximum number of samples which should be done before returning hand strength
     int commCards; //the number of Community Cards;
     float deal[2];
     float oppCards[7] = {0}, oppSuits[7] = {0}; //opponent's cards and suits
@@ -562,10 +568,15 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
     float myCards[7] = {0}, mySuits[7] = {0}; //the cards of the player whose winprob is being calculated (including community cards)
     float commonCards[5] = {0}, commonSuits[5] = {0};
 
-    //calculate minimum number of samples based off Wilson score method.
+    //calculate minimum number of samples based off Wilson score method under the worst case scenario where handStrength = 0.5
     double confidenceZScore = normZScore(0.5 + (winProbConfidence / 2), 0, 1);
-    double confidenceMaximum = normZScore(winProbAccuracy, handStrengthMean, handStrengthStDev);
-    int minSamples = 1 + (pow(confidenceZScore, 2) / confidenceMaximum) - confidenceZScore;
+
+    //commented out code is for the case when handStrengths have a normal distribution
+    ///double confidenceMaximum = normZScore(winProbAccuracy, handStrengthMean, handStrengthStDev);
+    ///int minSamples = 1 + (pow(confidenceZScore, 2) / confidenceMaximum) - confidenceZScore;
+
+    int minSamples = 1 + pow(confidenceZScore, 2.0) * (1 / (winProbAccuracy * handStrengthRange) - 1);
+
     if(minSamples > maxSamples)
     {
         minSamples = maxSamples;
@@ -650,7 +661,26 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
 
         if((samples == minSamples) && (prob != 0) && (prob != 1))
         {
-            minSamples = winProbRequiredSamples(prob);
+            double confidenceZScoreSquared = pow(confidenceZScore, 2.0);
+            double temp = samples;
+            double samplesSquared = pow(temp, 2.0);
+            double uncertainty; //the range of uncertainty of the true value of prob
+            if(prob > 0.5)
+            {
+                uncertainty = (1 / (1 + (confidenceZScoreSquared / temp))) * (prob + (0.5 * confidenceZScoreSquared / temp) + confidenceZScore * pow(prob * (1 - prob) / temp + 0.25 * confidenceZScoreSquared / samplesSquared, 0.5)) - prob;
+            }
+            else
+            {
+                uncertainty = prob - (1 / (1 + (confidenceZScoreSquared / temp))) * (prob + (0.5 * confidenceZScoreSquared / temp) - confidenceZScore * pow(prob * (1 - prob) / temp + 0.25 * confidenceZScoreSquared / samplesSquared, 0.5));
+            }
+
+            //commented out code is for the case when handstrengths have a normal distribution
+            ///minSamples = winProbRequiredSamples(prob);
+
+            if(uncertainty > (winProbAccuracy * handStrengthRange))
+            {   //if the uncertainty is above the required level increase the number of samples required by 20
+                minSamples += 20;
+            }
         }
     }
 
@@ -980,7 +1010,7 @@ int autoDeal(int roundNumber, int numberPlayers, int folds[maxPlayers], float pl
 }
 
 int deal(int roundNumber, int dealerPosition, int manualDealing, int numberPlayers, int trainingMode, int aiPlayers[maxPlayers], int playersKnockedOut[maxPlayers], string playerNames[maxPlayers], int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float existingCards[5 + (maxPlayers * 2)], float existingSuits[5 + (maxPlayers * 2)], float communityCards[5], float communitySuits[5])
-{
+{   //deal generates random cards for play if manualDealing is off or requests the new cards dealt from a real pack if manualDealing is on
     if(manualDealing == 0)
     {
         autoDeal(roundNumber, numberPlayers, folds, playerCards, playerSuits, existingCards, existingSuits, communityCards, communitySuits);
@@ -1486,6 +1516,67 @@ double normalizeNormalVariable(double variable, double mean, double stDev)
     return normalizedVariable;
 }
 
+int linearScaleInputWeights(int inputPosition, double scaleConstant, int layerSizes[numberLayers])
+{   //linearScaleInputWeights modifies multiplies input weights by a constant to scale them
+    for(int familyNumber = 0; familyNumber < familyCount; familyNumber ++)
+    {
+        for(int memberNumber = 0; memberNumber < familyMembers; memberNumber ++)
+        {
+            //open file
+            stringstream ss1;
+            ss1 << familyNumber;
+            string chromosomeFamilyString = ss1.str();
+            stringstream ss2;
+            ss2 << memberNumber;
+            string chromosomeMemberString = ss2.str();
+            string chromosomeFileName = "family";
+            chromosomeFileName.append(chromosomeFamilyString);
+            chromosomeFileName.append("member");
+            chromosomeFileName.append(chromosomeMemberString);
+            chromosomeFileName.append(".txt");
+            ifstream chromosomeWeightsFile( chromosomeFileName.c_str() );
+
+            double playerWeights[numberLayers][inputLayerSize][hiddenLayerSize];
+            //read through each layer and store in array chromosomeWeights
+            for(int i = 0; i < (numberLayers - 1); i ++)
+            {
+                for(int j = 0; j < layerSizes[i]; j ++)
+                {
+                    for(int k = 0; k < layerSizes[i + 1]; k ++)
+                    {
+                        chromosomeWeightsFile >> playerWeights[i][j][k];
+                    }
+                }
+            }
+            chromosomeWeightsFile.close();
+
+            //rescale input weights
+            for(int i = 0; i < layerSizes[1]; i ++)
+            {
+                //multiply input being modified by a constant
+                playerWeights[0][inputPosition][i] = playerWeights[0][inputPosition][i] * scaleConstant;
+            }
+
+            ofstream chromosomeWeightsFile2( chromosomeFileName.c_str() );
+            //write new weights to chromosomeWeightsFile2
+
+            for(int i = 0; i < (numberLayers - 1); i ++)
+            {
+                for(int j = 0; j < layerSizes[i]; j ++)
+                {
+                    for(int k = 0; k < layerSizes[i + 1]; k ++)
+                    {
+                        chromosomeWeightsFile2 << playerWeights[i][j][k] << "\t";
+                    }
+                    chromosomeWeightsFile2 << "\n";
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 int rescaleInputWeights(int inputPosition, int layerSizes[numberLayers], double oldMean, double oldRange, double newMean, double newRange, int familyNumber, int memberNumber)
 {   //rescaleInputWeights modifies weights when the mean and range/stdev changes so that it produces the same results as before
     //Range is replaced with standard deviation if variable is uniformly distributed
@@ -1504,43 +1595,66 @@ int rescaleInputWeights(int inputPosition, int layerSizes[numberLayers], double 
     chromosomeFileName.append(".txt");
     ifstream chromosomeWeightsFile( chromosomeFileName.c_str() );
 
-    double inPutLayerWeights[inputLayerSize][hiddenLayerSize];
-    //read through input layer and store in array chromosomeWeights
-    for(int i = 0; i < layerSizes[0]; i ++)
+    double playerWeights[numberLayers][inputLayerSize][hiddenLayerSize];
+    //read through each layer and store in array chromosomeWeights
+    for(int i = 0; i < (numberLayers - 1); i ++)
     {
-        for(int j = 0; j < layerSizes[1]; j ++)
+        for(int j = 0; j < layerSizes[i]; j ++)
         {
-            chromosomeWeightsFile >> inPutLayerWeights[i][j];
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
+            {
+                chromosomeWeightsFile >> playerWeights[i][j][k];
+            }
         }
     }
     chromosomeWeightsFile.close();
 
     //rescale input weights
-    for(int j = 0; j < layerSizes[1]; j++)
+    for(int i = 0; i < layerSizes[1]; i ++)
     {
-        inPutLayerWeights[0][j] = inPutLayerWeights[0][j] + 2 * (newMean - oldMean) / oldRange; //rescale bias input
-        inPutLayerWeights[inputPosition][j] = inPutLayerWeights[inputPosition][j] * (newRange / oldRange); //rescale input being modified
+        //rescale bias input
+        //for all weights coming out of bias
+        //newBias = oldBias - oldInputWeight * (2 * (newMean - oldMean) / oldRange - 0.5);
+        playerWeights[0][0][i] = playerWeights[0][0][i] - 2 * playerWeights[0][inputPosition][i] * (oldMean - newMean) / oldRange;
+
+        //rescale input being modified
+        //for all weights coming from inputPosition
+        //newInputWeight = (oldInputWeight * newRange) / oldrange;
+        playerWeights[0][inputPosition][i] = playerWeights[0][inputPosition][i] * (newRange / oldRange);
     }
 
     ofstream chromosomeWeightsFile2( chromosomeFileName.c_str() );
-    //read through input layer and store in array chromosomeWeights
-    for(int i = 0; i < layerSizes[0]; i ++)
+    //write modified weights to chromosomeWeightsFile2
+
+    for(int i = 0; i < (numberLayers - 1); i ++)
     {
-        for(int j = 0; j < layerSizes[1]; j ++)
+        for(int j = 0; j < layerSizes[i]; j ++)
         {
-            chromosomeWeightsFile2 << inPutLayerWeights[i][j];
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
+            {
+                chromosomeWeightsFile2 << playerWeights[i][j][k] << "\t";
+            }
+            chromosomeWeightsFile2 << "\n";
         }
     }
-    //open file to begin at first weight
-    //for all weights coming out of bias
-    //newBias = oldBias + 2 * (newMean - oldMean) / oldRange;
-    //for all weights coming from inputPosition
-    //newInputWeight = (oldInputWeight * newRange) / oldrange;
-    //close file, open to write and put in new inputlayer
+
     return 0;
 }
 
-int neuralNetwork(double pot, double handStrength, double callValue, double existingBet, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
+int rescaleAllChromosomeInputWeights(int inputPosition, int layerSizes[numberLayers], double oldMean, double oldRange, double newMean, double newRange)
+{   //rescaleAllChromosomeInputWeights modifies weights when the mean and range/stdev changes so that it produces the same results as before. This is done for every chromosome
+    for(int i = 0; i < familyCount; i ++)
+    {
+        for(int j = 0; j < familyMembers; j ++)
+        {
+            //repeat rescaling for every member of every family
+            rescaleInputWeights(inputPosition, layerSizes, oldMean, oldRange, newMean, newRange, i, j);
+        }
+    }
+    return 0;
+}
+
+int neuralNetwork(double pot, double handStrength, double callValue, double existingBet, double roundNumber, double playersActive, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
 {   //NeuralNetwork takes inputs and weights and returns the amount to bet
     //weights01 is the weights for the connections between the 0th and 1st layers of the neural
     //existingBet is the amount which the player has already staked
@@ -1551,7 +1665,7 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     int amountBet;
     inputLayer[0] = 1; //bias input in neural network
     inputLayer[1] = normalizeUniformVariable(log(pot / bigBlind), logPotMean, logPotRange);
-    inputLayer[2] = normalizeNormalVariable(handStrength, handStrengthMean, handStrengthStDev);
+    inputLayer[2] = normalizeUniformVariable(handStrength, handStrengthMean, handStrengthRange);
     if(callValue == 0)
     {
         inputLayer[3] = -3;
@@ -1569,15 +1683,18 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     {
         inputLayer[4] = normalizeUniformVariable(log(existingBet / bigBlind), logExistingBetMean, logExistingBetRange);
     }
-    //record input values for later analysis
-    fstream winProbFile;
-    winProbFile.open ("winProbRecords.txt", fstream::in | fstream::out | fstream::app);
-    winProbFile << inputLayer[2] <<endl;
 
-/*
+    inputLayer[5] = normalizeUniformVariable(roundNumber, roundNumberMean, roundNumberRange);
+
+    //record input values for later analysis
+
     fstream potFile;
     potFile.open ("relativePotRecords.txt", fstream::in | fstream::out | fstream::app);
     potFile << inputLayer[1] <<endl;
+
+    fstream winProbFile;
+    winProbFile.open ("winProbRecords.txt", fstream::in | fstream::out | fstream::app);
+    winProbFile << inputLayer[2] <<endl;
 
     fstream callValueFile;
     callValueFile.open ("callValueRecords.txt", fstream::in | fstream::out | fstream::app);
@@ -1586,7 +1703,15 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     fstream existingBetFile;
     existingBetFile.open ("existingBetValueRecords.txt", fstream::in | fstream::out | fstream::app);
     existingBetFile << inputLayer[4] <<endl;
-    */
+
+    fstream roundNumberFile;
+    roundNumberFile.open ("roundNumberRecords.txt", fstream::in | fstream::out | fstream::app);
+    roundNumberFile << inputLayer[5] << "\t" << roundNumber << endl;
+
+    fstream playersActiveFile;
+    playersActiveFile.open ("playersActiveRecords.txt", fstream::in | fstream::out | fstream::app);
+    playersActiveFile << playersActive << endl;
+
 
     //put input variables through neural network algorithm
 
@@ -1641,7 +1766,7 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
     return newBet;
 }
 
-int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int roundNumber, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
     double winChance = handStrength; //winChance is the probability of beating one player's cards, not all players
     int newBet;
@@ -1661,7 +1786,7 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
         }
     }
 
-    newBet = neuralNetwork(pot, winChance, callValue, existingBet, bigBlind, weights01, weights12);
+    newBet = neuralNetwork(pot, winChance, callValue, existingBet, roundNumber, playersActive, bigBlind, weights01, weights12);
 
     if(newBet > chips)
     {
@@ -1671,7 +1796,7 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
     return newBet;
 }
 
-int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], double handStrength, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], double handStrength, int roundNumber, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //return the new bet made by either AI or human players
     int newBet = -1;
     int callValue = maxBet - bets[position];
@@ -1683,7 +1808,7 @@ int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[m
     if(aiPlayers[position] == 1)
     {
         //newBet = simpleDecision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, playersActive);
-        newBet = decision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, playersActive, playerWeights);
+        newBet = decision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, roundNumber, playersActive, playerWeights);
     }
     else
     {
@@ -1978,8 +2103,8 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                         }
                         else
                         {
-                            int temp2 = communityCards[k];
-                            cout << temp2 << " " << temp << endl;
+                            int temp3 = communityCards[k];
+                            cout << temp3 << " " << temp << endl;
                         }
                     }
                 }
@@ -2019,7 +2144,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     else
                     {
                         double handStrength = handStrengths[position];
-                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, playersActive, playerWeights);
+                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, roundNumber, playersActive, playerWeights);
                     }
                     if(!trainingMode && aiPlayers[position])
                     {
@@ -2275,36 +2400,18 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
     std::normal_distribution<double> normaldistribution(0.0, 1.0);
 
     double chromosomeWeights[numberLayers][maxLayerSize][maxLayerSize];
-    int newNumberLayers = numberLayers; //global variable numberLayers must be the size of the new number of layers
 
     //create array containing the old layer sizes and a size of 0 for any layers not existent in the old neural network
     int extendedOldLayerSizes[] = {0};
-    for(int i = 0; i < newNumberLayers; i ++)
+    for(int i = 0; i < numberLayers; i ++)
     {
-        if(i <= oldNumberLayers)
+        if(i < oldNumberLayers)
         {
             extendedOldLayerSizes[i] = oldLayerSizes[i];
         }
         else
         {
             extendedOldLayerSizes[i] = 0;
-        }
-    }
-
-    for(int i = 0; i < oldNumberLayers; i ++)
-    {
-        extendedOldLayerSizes[i] = oldLayerSizes[i];
-    }
-
-    //fill an array with all new random weights
-    for(int i = 0; i < (newNumberLayers - 1); i ++)
-    {
-        for(int j = 0; j < newLayerSizes[i]; j ++)
-        {
-            for(int k = 0; k < newLayerSizes[i + 1]; k ++)
-            {
-                chromosomeWeights[i][j][k] = normaldistribution (generator);
-            }
         }
     }
 
@@ -2324,7 +2431,7 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
     ifstream chromosomeWeightsFile( chromosomeFileName.c_str() );
 
     //read through layers and store in array chromosomeWeights
-    for(int i = 0; i < (oldNumberLayers - 1); i ++)
+    for(int i = 0; i < (numberLayers - 1); i ++)
     {
         for(int j = 0; j < oldLayerSizes[i]; j ++)
         {
@@ -2337,10 +2444,44 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
 
     chromosomeWeightsFile.close();
 
+    //store random numbers in remaining elements of chromosomeWeights array
+    for(int i = 0; i < (numberLayers - 1); i ++)
+    {
+        if(oldLayerSizes[i] < newLayerSizes[i])
+        {   //if this layer increased in size then create random weights from new nodes in this layer to all nodes in next layer
+            for(int j = oldLayerSizes[i]; j < newLayerSizes[i]; j ++)
+            {
+                for(int k = 0; k < newLayerSizes[i + 1]; k ++)
+                {
+                    chromosomeWeights[i][j][k] = normaldistribution (generator);
+                }
+            }
+        }
+
+        if(oldLayerSizes[i + 1] < newLayerSizes[i + 1])
+        {   //if next layer increased in size then create random weights from all nodes in this layer to new nodes in next layer
+            for(int j = 0; j < newLayerSizes[i]; j ++)
+            {
+                for(int k = oldLayerSizes[i + 1]; k < newLayerSizes[i + 1]; k ++)
+                {
+                    chromosomeWeights[i][j][k] = normaldistribution (generator);
+                }
+            }
+        }
+
+        for(int j = oldLayerSizes[i]; j < newLayerSizes[i]; j ++)
+        {
+            for(int k = 0; k < newLayerSizes[i + 1]; k ++)
+            {
+                chromosomeWeights[i][j][k] = normaldistribution (generator);
+            }
+        }
+    }
+
     //store new array in file, overwrite old file.
     ofstream chromosomeWeightsFile2(chromosomeFileName.c_str() );
 
-    for(int i = 0; i < (newNumberLayers - 1); i ++)
+    for(int i = 0; i < (numberLayers - 1); i ++)
     {
         for(int j = 0; j < newLayerSizes[i]; j ++)
         {
@@ -2437,25 +2578,24 @@ int calcFamilyStats(double geneStats[familyCount * familyMembers][3], double zSc
     }
     ///end of temp added files
 
-    double familyVarianceProduct, familyVariance;
+    double medianVariance;
 
     fstream familyStatsFile;
     familyStatsFile.open ("familyStatsFile.txt", fstream::in | fstream::out | fstream::app);
     familyStatsFile << generation << endl;
 
-    //calculate the geometric mean variance for each family and store it in a file "familyStatsFile"
+    //calculate the median variance for each family and store it in a file "familyStatsFile"
     for(int i = 0; i < familyCount; i ++)
     {
-        familyVarianceProduct = 1;
+        double familyVariances[familyMembers];
         for(int j = 0; j < familyMembers; j ++)
         {
-            familyVarianceProduct = familyVarianceProduct * geneStats[(i * familyMembers) + j][2];
+            familyVariances[j] = geneStats[(i * familyMembers) + j][2];
         }
-        double temp = familyMembers;
-        familyVariance = pow(familyVarianceProduct, (1 / temp));
+        medianVariance = median(familyVariances, familyMembers);
 
-        familyStatsFile << familyVariance << "\t";
-        cout << "Family " << i << " mean variance is " << familyVariance << endl;
+        familyStatsFile << medianVariance << "\t";
+        cout << "Family " << i << " median variance is " << medianVariance << endl;
     }
 
     //calculate the median z score for each family and store it in a file "familyStatsFile"
@@ -2467,7 +2607,6 @@ int calcFamilyStats(double geneStats[familyCount * familyMembers][3], double zSc
         {
             familyZScores[j] = zScores[(i * familyMembers) + j];
         }
-        double temp = familyMembers;
         medianZScore = median(familyZScores, familyMembers);
 
         familyStatsFile << medianZScore << "\t";
@@ -2964,21 +3103,25 @@ int main()
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
     int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
-    int numberGenerations = 2, epochLength = 10;
+    int numberGenerations = 1000, epochLength = 50;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
     int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
+    int oldLayerSizes[numberLayers] = {5, hiddenLayerSize, outputLayerSize, 1};
 
     //if the algorithm is learning from scratch create the files storing player information
     if(learnFromScratch == 1)
     {
         cout << "Warning! Previous genetic weights are to be deleted" << endl;
+        cout << "Enter anything to overwrite neural network weights and continue" << endl;
+        string temp;
+        cin >> temp;
         createGeneFiles(layerSizes);
     }
 
     doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    ///int playerRefNumbers[maxPlayers] = {0,0,13,31,-1,0,0,0};
+    ///int playerRefNumbers[maxPlayers] = {0,8,16,20,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
     return 0;
