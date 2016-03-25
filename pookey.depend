@@ -1,0 +1,18 @@
+# depslib dependency file v1.0
+1458832051 source:c:\users\7\desktop\pookey\main.cpp
+	<stdlib.h>
+	<stdio.h>
+	<cmath>
+	<algorithm>
+	<time.h>
+	<iostream>
+	<sstream>
+	<iomanip>
+	<fstream>
+	<string>
+	<vector>
+	<random>
+	<chrono>
+	<windows.h>
+	<stdexcept>
+

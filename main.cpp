@@ -17,26 +17,41 @@
 using namespace std;
 
 #define maxPlayers 8 //the maximum number of players which can be in one game
-#define inputLayerSize 6 //the number of input variables in the neural network, including a bias input
-#define hiddenLayerSize 4 //the number of nodes in the hidden layer of the neural network, including a bias input
-#define outputLayerSize 2 //the number of output variables in the neural network, this is always 2 for deciding fold/check/call/raise and amount raised
-#define maxLayerSize 6 //the largest number of nodes in one layer
-#define numberVariables 3 //the number of variables which the neural network bases its decision from. Initially pot, probWin and bias
-#define numberLayers 4 //one layer is added for turning the output layer into a bet
-#define familyCount 4 //the number of families in the evolutionary algorithm
+
+#define maxLayerSize 12 //the largest number of nodes in one layer
+#define inputLayerSize 12 //the number of input variables in the neural network, including a bias input. To increase layer sizes use the addNewWeights function
+#define hiddenLayerSize 9 //the number of nodes in the hidden layer of the neural network, including a bias input
+#define outputLayerSize 3 //the number of output variables in the neural network, this is always 2 for deciding fold/check/call/raise and amount raised
+#define numberLayers 4
+
+#define familyCount 5 //the number of families in the evolutionary algorithm
 #define familyMembers 10 //the number of members in each family in the evolutionary algorithm
 
 //below are means and ranges for input variables which are used to normalize inputs
 #define handStrengthMean 0.475
 #define handStrengthRange 0.45
-#define logPotMean 3.643
-#define logPotRange 6.449
+#define logPotMean 3.190
+#define logPotRange 5.583
 #define logCallValueMean 2.284
 #define logCallValueRange 4.549
-#define logExistingBetMean 2.611
-#define logExistingBetRange 5.222
+#define logExistingBetMean 2.479
+#define logExistingBetRange 4.842
 #define roundNumberMean 2.5
-#define roundNumberRange 3
+#define roundNumberRange 3.0
+#define playersActiveMean 4.299
+#define playersActiveStDev 1.640
+#define initialNumberPlayersMean 5.0
+#define initialNumberPlayersRange 6.0
+#define logOpponentsInitialChipsMean 4.205
+#define logOpponentsInitialChipsRange 1.75
+#define logMyInitialChipsMean 3.851
+#define logMyInitialChipsRange 2.905
+#define logFirstTopRaiseMean 6.54
+#define logFirstTopRaiseRange 5.92
+#define logSecondTopRaiseMean 6.005
+#define logSecondTopRaiseRange 5.15
+#define logThirdTopRaiseMean 5.415
+#define logThirdTopRaiseRange 4.55
 
 //calculate winProb so that its winProbConfidence confidence interval is within winProbAccuracy percentiles of its sample mean
 #define winProbAccuracy 0.05
@@ -44,7 +59,7 @@ using namespace std;
 
 //calculate the family fitness rankings to geneFitnessRankingConfidence level of confidence
 #define geneFitnessRankingConfidence 0.95
-#define geneFitnessRankingAccuracy 0.125 //if geneFitnessRankingAccuracy = 0.125 the top 12.5% of members which get killed and the bottom 12.5% of members which stay alive may be mixed up
+#define geneFitnessRankingAccuracy 0.25 //if geneFitnessRankingAccuracy = 0.125 the top 12.5% of members which get killed and the bottom 12.5% of members which stay alive may be mixed up
 
 unsigned globalSeed = std::chrono::system_clock::now().time_since_epoch().count();
 std::default_random_engine generator (globalSeed);
@@ -653,8 +668,13 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
         myHandValue = getHandScore(myCards, mySuits);
         oppHandValue = getHandScore(oppCards, oppSuits);
 
-        if(myHandValue > oppHandValue){
+        if(myHandValue > oppHandValue)
+        {
             wins ++;
+        }
+        if(myHandValue == oppHandValue)
+        {
+            wins += 0.5;
         }
 
         prob = (wins / samples); //probability of beating one player
@@ -691,6 +711,7 @@ double winProb(float holeCards[2], float holeSuits[2], float communityCards[5], 
 
 int getHandStrengths(double handStrengths[maxPlayers], int roundNumber, int folds[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5])
 {
+    std::uniform_real_distribution<double> uniformdistribution(0.0,1.0);
     float holeCards[2];
     float holeSuits[2];
     for(int i = 0; i < maxPlayers; i ++)
@@ -1245,6 +1266,47 @@ int *sortIntArrayByDouble(int arrayToSort[], double sortArrayBy[], int arraySize
     return arrayToSort;
 }
 
+int sortIntArrayByInt(int arrayToSort[], int sortArrayBy[], int arraySize, int sortAscending)
+{   //sort arrayToSort in order of sortArrayBy. Sort in descending order if sortAscending is false
+    if(sortAscending)
+    {   //sort the array in ascending order
+        for(int i = 0; i < arraySize; i ++)
+        {
+            for(int j = 0; j < arraySize ; j ++)
+            {
+                if(sortArrayBy[i] < sortArrayBy[j])
+                {
+                    double temp1 = sortArrayBy[i];
+                    sortArrayBy[i] = sortArrayBy[j];
+                    sortArrayBy[j] = temp1;
+                    int temp2 = arrayToSort[i];
+                    arrayToSort[i] = arrayToSort[j];
+                    arrayToSort[j] = temp2;
+                }
+            }
+        }
+    }
+    else{
+        //sort the array in descending order
+        for(int i = 0; i < arraySize; i ++)
+        {
+            for(int j = 0; j < arraySize ; j ++)
+            {
+                if(sortArrayBy[i] > sortArrayBy[j])
+                {
+                    double temp1 = sortArrayBy[i];
+                    sortArrayBy[i] = sortArrayBy[j];
+                    sortArrayBy[j] = temp1;
+                    int temp2 = arrayToSort[i];
+                    arrayToSort[i] = arrayToSort[j];
+                    arrayToSort[j] = temp2;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int findWinners(int winnerPositions[maxPlayers], float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5], int folds[maxPlayers])
 {   //findwinners returns positions of best to worst hands
     //initially winnerPositions are in order of player not hand score
@@ -1573,7 +1635,6 @@ int linearScaleInputWeights(int inputPosition, double scaleConstant, int layerSi
             }
         }
     }
-
     return 0;
 }
 
@@ -1654,7 +1715,7 @@ int rescaleAllChromosomeInputWeights(int inputPosition, int layerSizes[numberLay
     return 0;
 }
 
-int neuralNetwork(double pot, double handStrength, double callValue, double existingBet, double roundNumber, double playersActive, double bigBlind, double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
+int neuralNetwork(double pot, double handStrength, double callValue, double existingBet, double roundNumber, double playersActive, double initialNumberPlayers, double bigBlind, double initialChipsAverage, int raises[maxPlayers], int folds[maxPlayers], double weights01[maxLayerSize][maxLayerSize], double weights12[maxLayerSize][maxLayerSize])
 {   //NeuralNetwork takes inputs and weights and returns the amount to bet
     //weights01 is the weights for the connections between the 0th and 1st layers of the neural
     //existingBet is the amount which the player has already staked
@@ -1668,7 +1729,7 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     inputLayer[2] = normalizeUniformVariable(handStrength, handStrengthMean, handStrengthRange);
     if(callValue == 0)
     {
-        inputLayer[3] = -3;
+        inputLayer[3] = -3; //normalized callValue is set to -3 to distinguish between very low call and no call
     }
     else
     {
@@ -1677,40 +1738,84 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
 
     if(existingBet == 0)
     {
-        inputLayer[4] = -2;
+        inputLayer[4] = -1.5; //normalized existingBet is set to -1.5 to distinguish between very low existing bet and no existing bet
     }
     else
     {
-        inputLayer[4] = normalizeUniformVariable(log(existingBet / bigBlind), logExistingBetMean, logExistingBetRange);
+        inputLayer[4] = normalizeUniformVariable(log(1 + (existingBet / bigBlind)), logExistingBetMean, logExistingBetRange);
     }
 
     inputLayer[5] = normalizeUniformVariable(roundNumber, roundNumberMean, roundNumberRange);
 
+    inputLayer[6] = normalizeNormalVariable(playersActive, playersActiveMean, playersActiveStDev);
+
+    inputLayer[7] = normalizeUniformVariable(initialNumberPlayers, initialNumberPlayersMean, initialNumberPlayersRange);
+
+    //sort raises to set as input variables
+    int orderedRaises[maxPlayers];
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        if(!folds[i])
+        {
+            orderedRaises[i] = raises[i];
+        }
+        else
+        {//if player is folded set their raises to 0 since they are not a threat
+            orderedRaises[i] = 0;
+        }
+    }
+    sort(orderedRaises, orderedRaises + maxPlayers, std::greater<int>());
+    inputLayer[8] = normalizeUniformVariable(log(1 + (orderedRaises[0] / bigBlind)), logFirstTopRaiseMean , logFirstTopRaiseRange);
+    inputLayer[9] = 0;
+    inputLayer[10] = 0;
+    ///inputLayer[9] = normalizeUniformVariable(log(1 + (orderedRaises[1] / bigBlind)), logSecondTopRaiseMean , logSecondTopRaiseRange);
+    ///inputLayer[10] = normalizeUniformVariable(log(1 + (orderedRaises[2] / bigBlind)), logThirdTopRaiseMean , logThirdTopRaiseRange);
+
+    inputLayer[11] = normalizeUniformVariable(log(initialChipsAverage / bigBlind), logOpponentsInitialChipsMean , logOpponentsInitialChipsRange);
+
+
+
     //record input values for later analysis
 
     fstream potFile;
-    potFile.open ("relativePotRecords.txt", fstream::in | fstream::out | fstream::app);
-    potFile << inputLayer[1] <<endl;
+    potFile.open ("potRecords.txt", fstream::in | fstream::out | fstream::app);
+    potFile << inputLayer[1] << endl;
 
-    fstream winProbFile;
-    winProbFile.open ("winProbRecords.txt", fstream::in | fstream::out | fstream::app);
-    winProbFile << inputLayer[2] <<endl;
+    fstream handStrengthFile;
+    handStrengthFile.open ("handStrengthRecords.txt", fstream::in | fstream::out | fstream::app);
+    handStrengthFile << inputLayer[2] << endl;
 
     fstream callValueFile;
     callValueFile.open ("callValueRecords.txt", fstream::in | fstream::out | fstream::app);
-    callValueFile << inputLayer[3] <<endl;
+    callValueFile << inputLayer[3] << endl;
 
     fstream existingBetFile;
     existingBetFile.open ("existingBetValueRecords.txt", fstream::in | fstream::out | fstream::app);
-    existingBetFile << inputLayer[4] <<endl;
+    existingBetFile << inputLayer[4] << endl;
 
     fstream roundNumberFile;
     roundNumberFile.open ("roundNumberRecords.txt", fstream::in | fstream::out | fstream::app);
-    roundNumberFile << inputLayer[5] << "\t" << roundNumber << endl;
+    roundNumberFile << inputLayer[5] << endl;
 
     fstream playersActiveFile;
     playersActiveFile.open ("playersActiveRecords.txt", fstream::in | fstream::out | fstream::app);
-    playersActiveFile << playersActive << endl;
+    playersActiveFile << inputLayer[6] << endl;
+
+    fstream initialPlayersActiveFile;
+    initialPlayersActiveFile.open ("InitialPlayersActiveRecords.txt", fstream::in | fstream::out | fstream::app);
+    initialPlayersActiveFile << inputLayer[7] << endl;
+
+    fstream topRaiseFile;
+    topRaiseFile.open ("topRaiseActiveRecords.txt", fstream::in | fstream::out | fstream::app);
+    topRaiseFile << inputLayer[8] << endl;
+
+    fstream raisesFile;
+    raisesFile.open ("raisesRecords.txt", fstream::in | fstream::out | fstream::app);
+    raisesFile << orderedRaises[0] << "\t" << orderedRaises[1] <<"\t" << orderedRaises[2] <<"\t" << orderedRaises[3] <<"\t" << orderedRaises[4] <<"\t" << orderedRaises[5] <<"\t" << orderedRaises[6] << endl;
+
+    fstream averageChipsFile;
+    averageChipsFile.open ("AvgChipsRecords.txt", fstream::in | fstream::out | fstream::app);
+    averageChipsFile <<  inputLayer[11] << endl;
 
 
     //put input variables through neural network algorithm
@@ -1724,7 +1829,7 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     {
         amountBet = 0;
     }
-    //else if the second output is less than 0.5 (0 without sigmoid) then call/check
+    //else if the second output is less than 0.5 (0 without sigmoid) then call
     else if(outputLayer[1] < 0.5)
     {
         amountBet = callValue;
@@ -1732,7 +1837,8 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     //else raise
     else
     {
-        amountBet = callValue + (((2 * outputLayer[1]) - 1) * pot); //amount raised is between 0 and the pot
+        amountBet = callValue + (outputLayer[2] * initialChipsAverage); //amount raised is between 0 and the average initial chips stack of opponents
+        ///amountBet = callValue + ((((2 * outputLayer[1]) - 1) * pot) + (((2 * outputLayer[2]) - 1) * initialChipsAverage);
     }
 
     if(amountBet < 0)
@@ -1766,13 +1872,28 @@ int simpleDecision(int position, int callValue, int chips, int pot, int bigBlind
     return newBet;
 }
 
-int decision(int position, int callValue, int chips, int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], double handStrength, int roundNumber, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int decision(int position, int callValue, int chips[maxPlayers], int pot, int bigBlind, int calls[maxPlayers], int raises[maxPlayers], int folds[maxPlayers], double handStrength, int roundNumber, int playersActive, int initialNumberPlayers, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //decision returns bet which is got using neural network decision method
     double winChance = handStrength; //winChance is the probability of beating one player's cards, not all players
+    int myChips = chips[position];
     int newBet;
 
-    //find amoutn already bet
+    //find amount already bet
     int existingBet = calls[position] + raises[position];
+
+    //calculate the average initial chip stack for remaining opponents
+    float initialChipsCount = 0;
+    double initialChipsTotal = 0;
+    int initialChipsAverage;
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        if((!folds[i]) && (i != position))
+        {
+            initialChipsCount ++;
+            initialChipsTotal += chips[i] + calls[i] + raises[i];
+        }
+    }
+    initialChipsAverage = (initialChipsTotal / initialChipsCount);
 
     //fill weight arrays for individual layers
     double weights01[maxLayerSize][maxLayerSize];
@@ -1786,17 +1907,25 @@ int decision(int position, int callValue, int chips, int pot, int bigBlind, int 
         }
     }
 
-    newBet = neuralNetwork(pot, winChance, callValue, existingBet, roundNumber, playersActive, bigBlind, weights01, weights12);
+    newBet = neuralNetwork(pot, winChance, callValue, existingBet, roundNumber, playersActive, initialNumberPlayers, bigBlind, initialChipsAverage, raises, folds, weights01, weights12);
 
-    if(newBet > chips)
+    if(newBet > myChips)
     {
-        newBet = chips;
+        newBet = myChips;
     }
+
+    fstream myChipsFile;
+    myChipsFile.open ("myChipsRecords.txt", fstream::in | fstream::out | fstream::app);
+    myChipsFile << (myChips / bigBlind) << endl;
+
+    fstream newBetFile;
+    newBetFile.open ("newBetRecords.txt", fstream::in | fstream::out | fstream::app);
+    newBetFile << (newBet / bigBlind) << endl;
 
     return newBet;
 }
 
-int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], double handStrength, int roundNumber, int playersActive, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
+int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[maxPlayers], int aiPlayers[maxPlayers], int chips[maxPlayers], int bets[maxPlayers], int calls[maxPlayers], int raises[maxPlayers], int folds[maxPlayers], double handStrength, int roundNumber, int playersActive, int initialNumberPlayers, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //return the new bet made by either AI or human players
     int newBet = -1;
     int callValue = maxBet - bets[position];
@@ -1808,7 +1937,7 @@ int getBet(int maxBet, int position, int pot, int bigBlind, string playerNames[m
     if(aiPlayers[position] == 1)
     {
         //newBet = simpleDecision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, playersActive);
-        newBet = decision(position, callValue, chips[position], pot, bigBlind, calls, raises, handStrength, roundNumber, playersActive, playerWeights);
+        newBet = decision(position, callValue, chips, pot, bigBlind, calls, raises, folds, handStrength, roundNumber, playersActive, initialNumberPlayers, playerWeights);
     }
     else
     {
@@ -2028,12 +2157,220 @@ int giveWinnings(int chips[maxPlayers], int bets[maxPlayers], int folds[maxPlaye
     return 0;
 }
 
+int storeHumanDecision(int position, int newBet, double bigBlind, int maxBet, int callValue, int playersActive, int initialNumberPlayers, int roundNumber, double handStrength, float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5], int pot, int active[maxPlayers], int chips[maxPlayers], int calls[maxPlayers], int bets[maxPlayers], int raises[maxPlayers], int folds[maxPlayers])
+{   //storeHumanDecision writes to a file the most recent bet made and the variables describing the state of the game
+    fstream humanDecisionFile;
+    humanDecisionFile.open ("humanDecisions.txt", fstream::in | fstream::out | fstream::app);
+
+    //write new bet
+    humanDecisionFile << (newBet / bigBlind) << "\t";
+
+    //write position, pot, playersActive, initialNumberPlayers, maxBet, callValue, roundNumber, handStrength
+    humanDecisionFile << position << "\t";
+    humanDecisionFile << (pot / bigBlind) << "\t";
+    humanDecisionFile << playersActive << "\t";
+    humanDecisionFile << initialNumberPlayers << "\t";
+    humanDecisionFile << maxBet << "\t";
+    humanDecisionFile << callValue << "\t";
+    humanDecisionFile << roundNumber << "\t";
+    humanDecisionFile << handStrength << "\t";
+
+    //write hole cards
+    for(int i = 0; i < 2; i ++)
+    {
+        humanDecisionFile << playerCards[position][i] << "\t";
+    }
+
+    //write hole suits
+    for(int i = 0; i < 2; i ++)
+    {
+        humanDecisionFile << playerSuits[position][i]  << "\t";
+    }
+
+    //write community cards
+    for(int i = 0; i < 5; i ++)
+    {
+        humanDecisionFile << communityCards[i] << "\t";
+    }
+
+    //write community suits
+    for(int i = 0; i < 5; i ++)
+    {
+        humanDecisionFile << communitySuits[i] << "\t";
+    }
+
+    //write folds
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        humanDecisionFile << folds[i] << "\t";
+    }
+
+    //write chips
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        humanDecisionFile << (chips[i] / bigBlind) << "\t";
+    }
+
+    //write bets
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        humanDecisionFile << (bets[i] / bigBlind) << "\t";
+    }
+
+    //write calls
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        humanDecisionFile << (calls[i] / bigBlind) << "\t";
+    }
+
+    //write raises
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        humanDecisionFile << (raises[i] / bigBlind) << "\t";
+    }
+
+    return 0;
+}
+
+int storeAiDecision(int position, int newBet, double bigBlind, int maxBet, int callValue, int playersActive, int initialNumberPlayers, int roundNumber, double handStrength, float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5], int pot, int active[maxPlayers], int chips[maxPlayers], int calls[maxPlayers], int bets[maxPlayers], int raises[maxPlayers], int folds[maxPlayers])
+{   //storeAiDecision writes to a file the most recent bet made and the variables describing the state of the game
+    fstream AiDecisionFile;
+    AiDecisionFile.open ("AiDecisions.txt", fstream::in | fstream::out | fstream::app);
+
+    //write new bet
+    AiDecisionFile << (newBet / bigBlind) << "\t";
+
+    //write position, pot, playersActive, initialNumberPlayers, maxBet, callValue, roundNumber, handStrength
+    AiDecisionFile << position << "\t";
+    AiDecisionFile << (pot / bigBlind) << "\t";
+    AiDecisionFile << playersActive << "\t";
+    AiDecisionFile << initialNumberPlayers << "\t";
+    AiDecisionFile << maxBet << "\t";
+    AiDecisionFile << callValue << "\t";
+    AiDecisionFile << roundNumber << "\t";
+    AiDecisionFile << handStrength << "\t";
+
+    //write hole cards
+    for(int i = 0; i < 2; i ++)
+    {
+        AiDecisionFile << playerCards[position][i] << "\t";
+    }
+
+    //write hole suits
+    for(int i = 0; i < 2; i ++)
+    {
+        AiDecisionFile << playerSuits[position][i]  << "\t";
+    }
+
+    //write community cards
+    for(int i = 0; i < 5; i ++)
+    {
+        AiDecisionFile << communityCards[i] << "\t";
+    }
+
+    //write community suits
+    for(int i = 0; i < 5; i ++)
+    {
+        AiDecisionFile << communitySuits[i] << "\t";
+    }
+
+    //write folds
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        AiDecisionFile << folds[i] << "\t";
+    }
+
+    //write chips
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        AiDecisionFile << (chips[i] / bigBlind) << "\t";
+    }
+
+    //write bets
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        AiDecisionFile << (bets[i] / bigBlind) << "\t";
+    }
+
+    //write calls
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        AiDecisionFile << (calls[i] / bigBlind) << "\t";
+    }
+
+    //write raises
+    for(int i = 0; i < maxPlayers; i ++)
+    {
+        AiDecisionFile << (raises[i] / bigBlind) << "\t";
+    }
+
+    return 0;
+}
+
+int storeDecision(int AIplayer, int position, int newBet, double bigBlind, int maxBet, int playersActive, int initialNumberPlayers, int roundNumber, double handStrength, float playerCards[maxPlayers][2], float playerSuits[maxPlayers][2], float communityCards[5], float communitySuits[5], int pot, int active[maxPlayers], int chips[maxPlayers], int calls[maxPlayers], int bets[maxPlayers], int raises[maxPlayers], int folds[maxPlayers])
+{   //storeAiDecision writes to a file the most recent bet made and the variables describing the state of the game
+    //information is stored in a different file depending on whether a human or AI played
+    int callValue = maxBet - bets[position];
+    if(callValue < 0)
+    {
+        callValue = 0;
+    }
+    if(AIplayer == 1)
+    {
+        storeAiDecision(position, newBet, bigBlind, maxBet, callValue, playersActive, initialNumberPlayers, roundNumber, handStrength, playerCards, playerSuits, communityCards, communitySuits, pot, active, chips, calls, bets, raises, folds);
+    }
+    else
+    {
+        storeHumanDecision(position, newBet, bigBlind, maxBet, callValue, playersActive, initialNumberPlayers, roundNumber, handStrength, playerCards, playerSuits, communityCards, communitySuits, pot, active, chips, calls, bets, raises, folds);
+    }
+}
+
+int storeProfit(int position, int aiPlayers[maxPlayers], int chips[maxPlayers], int initialChips[maxPlayers], double bigBlind)
+{   //storeProfit records the profit earned following an action earlier in the game
+    if(aiPlayers[position])
+    {
+        fstream AiDecisionFile;
+        AiDecisionFile.open ("AiDecisions.txt", fstream::in | fstream::out | fstream::app);
+
+        //write new bet
+        AiDecisionFile << ((chips[position] - initialChips[position]) / bigBlind) << endl;
+    }
+    else
+    {
+        fstream humanDecisionFile;
+        humanDecisionFile.open ("humanDecisions.txt", fstream::in | fstream::out | fstream::app);
+
+        //write new bet
+        humanDecisionFile << ((chips[position] - initialChips[position]) / bigBlind) << endl;
+    }
+    return 0;
+}
+
+int selectMove(int initialNumberPlayers)
+{   //selectMove picks a random move/action based on the expected number of moves that are made in a game
+    //number of actions made in a game is approx 2.5 for every player and
+    int moveNumber = -1;
+    int meanMoves, stDevMoves;
+
+    meanMoves = 4 + 1.4 * initialNumberPlayers;
+    stDevMoves = 4.7;
+    std::normal_distribution<double> normaldistribution(meanMoves, stDevMoves);
+
+    while(moveNumber < 0)
+    {
+        moveNumber = (normaldistribution(generator) + 0.5);
+    }
+
+    return moveNumber;
+}
+
 int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], int chips[maxPlayers], string playerNames[maxPlayers], int playersKnockedOut[maxPlayers], int numberPlayers, int bigBlind, int manualDealing, double playerWeights[maxPlayers][numberLayers][maxLayerSize][maxLayerSize])
 {   //playhand plays one hand of poker and modifies players' chip counts
     //If trainingMode is true then nothing is printed and there are no "enter anything to continue" prompts
 
     int pot = 0;
     int playersActive = numberPlayers; //playersactive is number of players not folded, numberplayers is number of players not knocked out
+    int initialNumberPlayers = numberPlayers;
     int position;
     int roundActive = 1; //is the round still being played
     int maxBet = bigBlind;
@@ -2051,6 +2388,11 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     float holeCards[2], holeSuits[2]; //cards and suits of a given player
     double handStrengths[maxPlayers];
 
+    //variables used in recording training data
+    int recordMoveNumber, positionStored, initialChips[maxPlayers], actionCount = 0; //actionCount is a running count of how many betting actions have been made in this game
+
+    recordMoveNumber = selectMove(initialNumberPlayers);
+
     //do stuff that is needed before round 1 starts
     for(int k = 0; k < maxPlayers; k ++)
     {   //populate various arrays defining each player's situation
@@ -2062,6 +2404,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
         {
             folds[k] = 1;
         }
+        initialChips[k] = chips[k];
     }
 
     int blindInfo[3];
@@ -2144,7 +2487,13 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                     else
                     {
                         double handStrength = handStrengths[position];
-                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, handStrength, roundNumber, playersActive, playerWeights);
+                        newBet = getBet(maxBet, position, pot, bigBlind, playerNames, aiPlayers, chips, bets, calls, raises, folds, handStrength, roundNumber, playersActive, initialNumberPlayers, playerWeights);
+                        actionCount ++;
+                        if(actionCount == recordMoveNumber)
+                        {   //record the state of the game and the new bet
+                            storeDecision(aiPlayers[position], position, newBet, bigBlind, maxBet, playersActive, initialNumberPlayers, roundNumber, handStrength, playerCards, playerSuits, communityCards, communitySuits, pot, active, chips, calls, bets, raises, folds);
+                            positionStored = position;
+                        }
                     }
                     if(!trainingMode && aiPlayers[position])
                     {
@@ -2183,9 +2532,14 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             pot -= (bets[betPositions[0]] - bets[betPositions[1]]);
         }
     }
-
     //Show cards of those not folded and give chips to the winner(s)
     giveWinnings(chips, bets, folds, playerNames, trainingMode, playerCards, playerSuits, communityCards, communitySuits);
+
+    //save the profit earned for the training data
+    if(actionCount >= recordMoveNumber)
+    {
+        storeProfit(positionStored, aiPlayers, chips, initialChips, bigBlind);
+    }
 
     for(int k = 0; k < maxPlayers; k ++)
     {
@@ -2194,6 +2548,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
             cout << playerNames[k] << " has a chip stack of " << chips[k] << endl;
         }
     }
+
     return 0;
 }
 
@@ -2378,13 +2733,14 @@ int createGeneFiles(int layerSizes[numberLayers])
             playerFileName.append(memberString);
             playerFileName.append(".txt");
             ofstream playerWeightsFile( playerFileName.c_str() );
-            for(int j = 0; j < (numberLayers - 1); j ++)
+            for(int k = 0; k < (numberLayers - 1); k ++)
             {
-                for(int k = 0; k < layerSizes[j]; k ++)
+                double doubleLayerSize = layerSizes[k];
+                for(int l = 0; l < layerSizes[k]; l ++)
                 {
-                    for(int l = 0; l < layerSizes[j+1]; l ++)
+                    for(int m = 0; m < layerSizes[k + 1]; m ++)
                     {
-                        playerWeightsFile << normaldistribution (generator) << "\t";
+                        playerWeightsFile << (normaldistribution(generator))/ sqrt(doubleLayerSize) << "\t" ;
                     }
                     playerWeightsFile << "\n";
                 }
@@ -2447,13 +2803,14 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
     //store random numbers in remaining elements of chromosomeWeights array
     for(int i = 0; i < (numberLayers - 1); i ++)
     {
+        double doubleLayerSize = newLayerSizes[i];
         if(oldLayerSizes[i] < newLayerSizes[i])
         {   //if this layer increased in size then create random weights from new nodes in this layer to all nodes in next layer
             for(int j = oldLayerSizes[i]; j < newLayerSizes[i]; j ++)
             {
                 for(int k = 0; k < newLayerSizes[i + 1]; k ++)
                 {
-                    chromosomeWeights[i][j][k] = normaldistribution (generator);
+                    chromosomeWeights[i][j][k] = (normaldistribution(generator)) / sqrt(doubleLayerSize);
                 }
             }
         }
@@ -2464,7 +2821,7 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
             {
                 for(int k = oldLayerSizes[i + 1]; k < newLayerSizes[i + 1]; k ++)
                 {
-                    chromosomeWeights[i][j][k] = normaldistribution (generator);
+                    chromosomeWeights[i][j][k] = (normaldistribution(generator)) / sqrt(doubleLayerSize);
                 }
             }
         }
@@ -2473,7 +2830,7 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
         {
             for(int k = 0; k < newLayerSizes[i + 1]; k ++)
             {
-                chromosomeWeights[i][j][k] = normaldistribution (generator);
+                chromosomeWeights[i][j][k] = (normaldistribution(generator)) / sqrt(doubleLayerSize);
             }
         }
     }
@@ -2492,12 +2849,12 @@ int modifyLayerSizes(int newLayerSizes[], int oldLayerSizes[], int oldNumberLaye
             chromosomeWeightsFile2 << "\n";
         }
     }
-
     return 0;
 }
 
 int addNewWeights(int newLayerSizes[], int oldLayerSizes[], int oldNumberLayers)
 {   //addNewWeights introduces weights for new neurons in the neural network for all chromosomes
+    //to use function set maxLayerSize and other globally defined layer sizes to the new sizes
     for(int i = 0; i < familyCount; i ++)
     {
         for(int j = 0; j < familyMembers; j ++)
@@ -2568,7 +2925,7 @@ double median(double arr[], int arraySize)
 }
 
 int calcFamilyStats(double geneStats[familyCount * familyMembers][3], double zScores[familyCount * familyMembers], int generation)
-{
+{   //calcFamilyStats finds the mean and variance of each family's profits
     fstream geneStatsFile;
     geneStatsFile.open ("geneStatsFile.txt", fstream::in | fstream::out | fstream::app);
     geneStatsFile << generation << endl;
@@ -2619,7 +2976,7 @@ int calcFamilyStats(double geneStats[familyCount * familyMembers][3], double zSc
 }
 
 int maxInIntArray(int arr[], int arraySize)
-{
+{   //maxInIntArray finds the largest integer in an array
     int maxElement = arr[0];
     for(int i = 1; i < arraySize; i ++)
     {
@@ -2756,11 +3113,16 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
         }
 
         ///minTrials = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
+
         if(minTrials <= minGamesPlayed)
         {
             minTrialsNotReached = 0;
+
+            int temp = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
+            fstream minTrialsFile;
+            minTrialsFile.open ("minTrialsRecords.txt", fstream::in | fstream::out | fstream::app);
+            minTrialsFile << temp <<endl;
         }
-        cout << "mintrials is " <<minTrials << endl;
     }
 
     //calculate Z scores for each player
@@ -2859,7 +3221,7 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
     int motherNumber = parentNumbers[0];
     int fatherNumber = parentNumbers[1];
 
-    //open mother's file and copy genes to the offspring
+    //open mother's file and copy genes to the offspring before adding father's genes and mutations
     stringstream ss1;
     ss1 << familyNumber;
     string motherFamilyString = ss1.str();
@@ -2877,7 +3239,7 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
     {
         for(int j = 0; j < layerSizes[i]; j ++)
         {
-            for(int k = 0; k < layerSizes[i+1]; k ++)
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
             {
                 motherWeightsFile >> offspringWeights[i][j][k];
             }
@@ -2902,15 +3264,16 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
     //go through father's gene, if crossover is done then use father's gene, otherwise assign father's gene to a temp
     for(int i = 0; i < (numberLayers - 1); i ++)
     {
+        double doubleLayerSize = layerSizes[i];
         for(int j = 0; j < layerSizes[i]; j ++)
         {
-            for(int k = 0; k < layerSizes[i+1]; k ++)
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
             {
                 double temp;
                 if(mutationDistribution(generator))
                 {
                     fatherWeightsFile >> temp;
-                    offspringWeights[i][j][k] = normalGeneDistribution(generator);;
+                    offspringWeights[i][j][k] = (normalGeneDistribution(generator))/ sqrt(doubleLayerSize); //divide by sqrt(layersize) to avoid saturating preceptrons
                 }
                 else
                 {
@@ -2947,7 +3310,7 @@ int createOffspring(int layerSizes[numberLayers], int familyNumber, int memberNu
     {
         for(int j = 0; j < layerSizes[i]; j ++)
         {
-            for(int k = 0; k < layerSizes[i+1]; k ++)
+            for(int k = 0; k < layerSizes[i + 1]; k ++)
             {
                 offspringWeightsFile << offspringWeights[i][j][k] << "\t";
             }
@@ -2977,7 +3340,7 @@ int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyN
         selectParents(memberRanks, newParents);
 
         //change the offspring's file
-        createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate);
+        ///createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate);
     }
 
     return 0;
@@ -3101,13 +3464,15 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
 int main()
 {
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 200; //the minimum number of hands each gene must play to estimate their performance
+    int minNumberTrials = 8000; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
-    int numberGenerations = 1000, epochLength = 50;
+    int numberGenerations = 1, epochLength = 1;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
     int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
-    int oldLayerSizes[numberLayers] = {5, hiddenLayerSize, outputLayerSize, 1};
+    ///int oldLayerSizes[numberLayers] = {12, 9, 3, 1};
+
+    ///addNewWeights(layerSizes, oldLayerSizes, numberLayers);
 
     //if the algorithm is learning from scratch create the files storing player information
     if(learnFromScratch == 1)
@@ -3119,9 +3484,10 @@ int main()
         createGeneFiles(layerSizes);
     }
 
+    ///line 3379 updating genes is commented out for testing
     doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    ///int playerRefNumbers[maxPlayers] = {0,8,16,20,-1,0,0,0};
+    ///int playerRefNumbers[maxPlayers] = {0,3,12,42,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
 
     return 0;
