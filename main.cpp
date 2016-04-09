@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <cmath>
@@ -11,8 +12,8 @@
 #include <vector>
 #include <random>
 #include <chrono>
-#include <windows.h>
 #include <stdexcept>
+#include <ctime>
 
 using namespace std;
 
@@ -61,7 +62,7 @@ using namespace std;
 #define geneFitnessRankingConfidence 0.95
 #define geneFitnessRankingAccuracy 0.25 //if geneFitnessRankingAccuracy = 0.125 the top 12.5% of members which get killed and the bottom 12.5% of members which stay alive may be mixed up
 
-unsigned globalSeed = std::chrono::system_clock::now().time_since_epoch().count();
+unsigned globalSeed = time(0);
 std::default_random_engine generator (globalSeed);
 
 double RationalApproximation(double t)
@@ -1319,7 +1320,7 @@ int findWinners(int winnerPositions[maxPlayers], float playerCards[maxPlayers][2
     for(int position = 0; position < maxPlayers; position ++){
         //check if player is folded or knocked out, if not then find their handscore
         if(folds[position] == 0){
-            //combine community cards and player’s cards
+            //combine community cards and player\92s cards
             float handScoreCards[7];
             float handScoreSuits[7];
             for(int j = 0; j < 5; j++){
@@ -1330,7 +1331,7 @@ int findWinners(int winnerPositions[maxPlayers], float playerCards[maxPlayers][2
             handScoreSuits[5] = playerSuits[position][0];
             handScoreCards[6] = playerCards[position][1];
             handScoreSuits[6] = playerSuits[position][1];
-            //find player’s handscore
+            //find player\92s handscore
             handScores[position] = getHandScore(handScoreCards, handScoreSuits);
         }
 	}
@@ -1776,7 +1777,7 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
 
 
     //record input values for later analysis
-
+/*
     fstream potFile;
     potFile.open ("potRecords.txt", fstream::in | fstream::out | fstream::app);
     potFile << inputLayer[1] << endl;
@@ -1817,7 +1818,7 @@ int neuralNetwork(double pot, double handStrength, double callValue, double exis
     averageChipsFile.open ("AvgChipsRecords.txt", fstream::in | fstream::out | fstream::app);
     averageChipsFile <<  inputLayer[11] << endl;
 
-
+    */
     //put input variables through neural network algorithm
 
     oneLayerFeedForward(inputLayer, inputLayerSize, hiddenLayer, hiddenLayerSize, weights01, 1);
@@ -1914,14 +1915,14 @@ int decision(int position, int callValue, int chips[maxPlayers], int pot, int bi
         newBet = myChips;
     }
 
-    fstream myChipsFile;
+   /* fstream myChipsFile;
     myChipsFile.open ("myChipsRecords.txt", fstream::in | fstream::out | fstream::app);
     myChipsFile << (myChips / bigBlind) << endl;
 
     fstream newBetFile;
     newBetFile.open ("newBetRecords.txt", fstream::in | fstream::out | fstream::app);
     newBetFile << (newBet / bigBlind) << endl;
-
+*/
     return newBet;
 }
 
@@ -2491,7 +2492,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
                         actionCount ++;
                         if(actionCount == recordMoveNumber)
                         {   //record the state of the game and the new bet
-                            storeDecision(aiPlayers[position], position, newBet, bigBlind, maxBet, playersActive, initialNumberPlayers, roundNumber, handStrength, playerCards, playerSuits, communityCards, communitySuits, pot, active, chips, calls, bets, raises, folds);
+                            //storeDecision(aiPlayers[position], position, newBet, bigBlind, maxBet, playersActive, initialNumberPlayers, roundNumber, handStrength, playerCards, playerSuits, communityCards, communitySuits, pot, active, chips, calls, bets, raises, folds);
                             positionStored = position;
                         }
                     }
@@ -2538,7 +2539,7 @@ int playHand(int dealerPosition, int trainingMode, int aiPlayers[maxPlayers], in
     //save the profit earned for the training data
     if(actionCount >= recordMoveNumber)
     {
-        storeProfit(positionStored, aiPlayers, chips, initialChips, bigBlind);
+        //storeProfit(positionStored, aiPlayers, chips, initialChips, bigBlind);
     }
 
     for(int k = 0; k < maxPlayers; k ++)
@@ -3087,7 +3088,6 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
             dealerPosition = gameInfo[0];
             numberPlayersHand = gameInfo[1];
             minGamesPlayed = gameInfo[2];
-
             for(int i = 0; i < numberPlayersHand; i ++)
             {
                 //record players' chips before the game
@@ -3118,13 +3118,12 @@ double testGeneFitness(int minTrials, float bigBlind, float minChips, float maxC
         {
             minTrialsNotReached = 0;
 
-            int temp = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
+            /*int temp = geneFitnessMinTrials(geneStats, gamesPlayed, generation);
             fstream minTrialsFile;
             minTrialsFile.open ("minTrialsRecords.txt", fstream::in | fstream::out | fstream::app);
-            minTrialsFile << temp <<endl;
+            minTrialsFile << temp <<endl;*/
         }
     }
-
     //calculate Z scores for each player
     for(int i = 0; i < (familyCount * familyMembers); i ++)
     {
@@ -3340,7 +3339,7 @@ int updateFamily(double allGeneFitness[familyCount * familyMembers], int familyN
         selectParents(memberRanks, newParents);
 
         //change the offspring's file
-        ///createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate);
+        createOffspring(layerSizes, familyNumber, memberRanks[i], memberRanks, crossoverRate, mutationRate);
     }
 
     return 0;
@@ -3461,10 +3460,98 @@ int playAgainstAI(int playerRefNumbers[maxPlayers], string humanName, int manual
     return 0;
 }
 
+
+int saveBestGenes(int minNumberTrials, int numberTopGenes, int groupStartNumber, int bigBlind, int minChips, int maxChips, int layerSizes[numberLayers])
+{   //saveBestGenes finds the fitness of all genes, then stores the best genes with new reference numbers starting from groupStartNumber
+
+    int numberGenes = (familyCount * familyMembers);
+    //test the Z scores of each gene with the specified minNumberTrials
+    double zScores[numberGenes];
+    testGeneFitness(minNumberTrials, bigBlind, minChips, maxChips, layerSizes, zScores, 1);
+
+    //create an array of gene reference numbers
+    int geneRefNumbers[numberGenes];
+
+    for(int i = 0; i < numberGenes; i ++)
+    {
+        geneRefNumbers[i] = i;
+    }
+
+    //sort the reference numbers by the Z scores
+    sortIntArrayByDouble(geneRefNumbers, zScores, (familyCount * familyMembers), 0);
+
+    //store the weights of all top genes
+    double playerWeights[numberTopGenes][numberLayers][maxLayerSize][maxLayerSize];
+    for(int topPlayerCount = 0; topPlayerCount < numberTopGenes; topPlayerCount ++)
+    {
+        int memberNumber = (geneRefNumbers[topPlayerCount] % familyMembers);
+        int familyNumber = (geneRefNumbers[topPlayerCount] / familyMembers);
+        stringstream ss1;
+        ss1 << familyNumber;
+        string familyString = ss1.str();
+        stringstream ss2;
+        ss2 << memberNumber;
+        string memberString = ss2.str();
+        string playerFileName = "family";
+        playerFileName.append(familyString);
+        playerFileName.append("member");
+        playerFileName.append(memberString);
+        playerFileName.append(".txt");
+
+        ifstream playerWeightsFile( playerFileName.c_str() );
+        for(int i = 0; i < (numberLayers - 1); i ++)
+        {
+            for(int j = 0; j < layerSizes[i]; j ++)
+            {
+                for(int k = 0; k < layerSizes[i + 1]; k ++)
+                {
+                    playerWeightsFile >> playerWeights[topPlayerCount][i][j][k];
+                }
+            }
+        }
+        playerWeightsFile.close();
+    }
+
+    //write all of top genes to files beginning at groupStartNumber
+    for(int refNumber = groupStartNumber; refNumber < (groupStartNumber + numberTopGenes); refNumber ++)
+    {
+        int memberNumber = (refNumber % familyMembers);
+        int familyNumber = (refNumber / familyMembers);
+        stringstream ss1;
+        ss1 << familyNumber;
+        string familyString = ss1.str();
+        stringstream ss2;
+        ss2 << memberNumber;
+        string memberString = ss2.str();
+        string playerFileName = "family";
+        playerFileName.append(familyString);
+        playerFileName.append("member");
+        playerFileName.append(memberString);
+        playerFileName.append(".txt");
+
+        int topPlayerIndex = (refNumber - groupStartNumber); //The rank which a given gene is among the top genes
+        ofstream playerWeightsFile( playerFileName.c_str() );
+        for(int i = 0; i < (numberLayers - 1); i ++)
+        {
+            for(int j = 0; j < layerSizes[i]; j ++)
+            {
+                for(int k = 0; k < layerSizes[i + 1]; k ++)
+                {
+                    playerWeightsFile << playerWeights[topPlayerIndex][i][j][k] << "\t";
+                }
+                playerWeightsFile << endl;
+            }
+        }
+        playerWeightsFile.close();
+    }
+
+    return 0;
+}
+
 int main()
 {
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 8000; //the minimum number of hands each gene must play to estimate their performance
+    int minNumberTrials = 3200; //the minimum number of hands each gene must play to estimate their performance32
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 1;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
@@ -3486,6 +3573,8 @@ int main()
 
     ///line 3379 updating genes is commented out for testing
     doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
+
+    ///saveBestGenes(3200, 10, 40, bigBlind, minChips, maxChips, layerSizes);
 
     ///int playerRefNumbers[maxPlayers] = {0,3,12,42,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
