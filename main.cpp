@@ -14,6 +14,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <ctime>
+#include <boost/lambda/lambda.hpp>
 
 using namespace std;
 
@@ -3377,7 +3378,7 @@ int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, do
         testGeneFitness(minTrials, bigBlind, minChips, maxChips, layerSizes, zScores, generationCount);
 
         //update each family's genes
-        updateGenes(zScores, crossoverRate, mutationRates, layerSizes);
+        ///updateGenes(zScores, crossoverRate, mutationRates, layerSizes);
 
         if((generationCount % epochLength) == 0)
         {
@@ -3551,7 +3552,7 @@ int saveBestGenes(int minNumberTrials, int numberTopGenes, int groupStartNumber,
 int main()
 {
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 3200; //the minimum number of hands each gene must play to estimate their performance32
+    int minNumberTrials = 6400; //the minimum number of hands each gene must play to estimate their performance32
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 1;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
@@ -3574,7 +3575,7 @@ int main()
     ///line 3379 updating genes is commented out for testing
     doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    ///saveBestGenes(3200, 10, 40, bigBlind, minChips, maxChips, layerSizes);
+    ///saveBestGenes(3200, 10, 0, bigBlind, minChips, maxChips, layerSizes);
 
     ///int playerRefNumbers[maxPlayers] = {0,3,12,42,-1,0,0,0};
     ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
