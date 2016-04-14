@@ -3378,7 +3378,7 @@ int doGeneticAlgorithm(int numberGenerations, int epochLength, int minTrials, do
         testGeneFitness(minTrials, bigBlind, minChips, maxChips, layerSizes, zScores, generationCount);
 
         //update each family's genes
-        ///updateGenes(zScores, crossoverRate, mutationRates, layerSizes);
+        updateGenes(zScores, crossoverRate, mutationRates, layerSizes);
 
         if((generationCount % epochLength) == 0)
         {
@@ -3548,37 +3548,449 @@ int saveBestGenes(int minNumberTrials, int numberTopGenes, int groupStartNumber,
 
     return 0;
 }
+int splitTrainingData(double trainingProportion, double validationProportion, double testProportion, int totalDataLength, vector<int> &layerSizes, vector< vector<double> > &allInputLayers, vector< vector<double> > &allTargets, vector< vector<double> > &trainingInputLayers, vector< vector<double> > &trainingTargets, vector< vector<double> > &validationInputLayers, vector< vector<double> > &validationTargets, vector< vector<double> > &testInputLayers, vector< vector<double> > &testTargets)
+{   //splitTrainingData divides the data into three groups, one for training, one for validation and one for testing
+
+    int numberOfLayers = layerSizes.size();
+    int inputLayerLength = layerSizes.at(0);
+    int outputLayerLength = layerSizes.at(numberOfLayers - 1);
+
+    //pick a random point to start the data at
+    std::uniform_int_distribution<int> uniformStartPoint(0, totalDataLength - 1);
+
+    //calculate the start points for each group
+    if((trainingProportion + validationProportion + testProportion) > 1.0)
+    {
+        cout << "Warning: training, validation, and test proportions add to greater than 1" << endl;
+    }
+    double totalDataLengthDouble = totalDataLength;
+    int trainingStart = uniformStartPoint (generator);
+    double trainingDataSizeDouble = (trainingProportion * totalDataLength);
+    int trainingDataSize = trainingDataSizeDouble;
+    int validationStart = (trainingStart + trainingDataSize) % totalDataLength;
+    double validationDataSizeDouble = (validationProportion * totalDataLengthDouble);
+    int validationDataSize = validationDataSizeDouble;
+    int testStart = (validationStart + validationDataSize) % totalDataLength;
+    double testDataSizeDouble = (testProportion * totalDataLengthDouble);
+    int testDataSize = testDataSizeDouble;
+    cout << "totalDataLength:" << totalDataLength << endl;
+    cout << "training Proportion:" << trainingProportion << endl;
+    cout << "length time training Proportion:" << (trainingProportion * totalDataLength) << endl;
+
+    cout << "training start: " << trainingStart << endl;
+    cout << "validation start: " << validationStart << endl;
+    cout << "test start: " << testStart << endl;
+
+    cout << "training data size:" <<trainingDataSize << endl;
+    cout << "doubletraining data size:" << trainingDataSizeDouble << endl;
+    //resize vectors
+    trainingInputLayers.resize( trainingDataSize , vector<double>( inputLayerLength) );
+    trainingTargets.resize( trainingDataSize , vector<double>( outputLayerLength) );
+    validationInputLayers.resize( validationDataSize , vector<double>( inputLayerLength) );
+    validationTargets.resize( validationDataSize , vector<double>( outputLayerLength) );
+    testInputLayers.resize( testDataSize , vector<double>( inputLayerLength) );
+    testTargets.resize( testDataSize , vector<double>( outputLayerLength) );
+
+    //fill vectors with data
+    int dataIndex = trainingStart;
+    int trainingDataIndex = 0;
+    while(dataIndex != validationStart)
+    {
+        for(int i = 0; i < inputLayerLength; i ++)
+        {
+            trainingInputLayers.at(trainingDataIndex).at(i) = allInputLayers.at(dataIndex).at(i);
+        }
+        for(int i = 0; i < outputLayerLength; i ++)
+        {
+            trainingTargets.at(trainingDataIndex).at(i) = allTargets.at(dataIndex).at(i);
+        }
+        dataIndex = (dataIndex + 1) % totalDataLength;
+        trainingDataIndex ++;
+    }
+
+    int validationDataIndex = 0;
+    while(dataIndex != testStart)
+    {
+        for(int i = 0; i < inputLayerLength; i ++)
+        {
+            validationInputLayers.at(validationDataIndex).at(i) = allInputLayers.at(dataIndex).at(i);
+        }
+        for(int i = 0; i < outputLayerLength; i ++)
+        {
+            validationTargets.at(validationDataIndex).at(i) = allTargets.at(dataIndex).at(i);
+        }
+        dataIndex = (dataIndex + 1) % totalDataLength;
+        validationDataIndex ++;
+    }
+
+    int testDataIndex = 0;
+    for(int j = 0; j < testDataSize; j ++)
+    {
+        for(int i = 0; i < inputLayerLength; i ++)
+        {
+            testInputLayers.at(testDataIndex).at(i) = allInputLayers.at(dataIndex).at(i);
+        }
+        for(int i = 0; i < outputLayerLength; i ++)
+        {
+            testTargets.at(testDataIndex).at(i) = allTargets.at(dataIndex).at(i);
+        }
+        dataIndex = (dataIndex + 1) % totalDataLength;
+        testDataIndex ++;
+    }
+
+    return 0;
+}
+
+int NNFeedForward(vector<int> &layerSizes, vector<double> &inputLayer, vector< vector< vector<double> > > &weights, vector< vector<double> > &neuronActivations)
+{   //NNFeedForward propagates the inputs through the neural network assuming sigmoid is always applied. neuronActivations 3D vector is modified
+    int numberOfLayers = layerSizes.size();
+
+    //set the input layer as the first layer activations
+    int inputLayerLength = layerSizes.at(0);
+    int inputLayerNumber = 0;
+    for(int neuronCount = 0; neuronCount < inputLayerLength; neuronCount ++)
+    {
+        neuronActivations.at(inputLayerNumber).at(neuronCount) = inputLayer.at(neuronCount);
+    }
+
+    //feed forward through the neural network
+    for(int layerCount = 0; layerCount < (numberOfLayers - 1); layerCount ++)
+    {   //loop through each layer
+
+        int currentLayerSize = layerSizes.at(layerCount);
+        int nextLayerSize = layerSizes.at(layerCount + 1);
+
+        //find values being propagated into next layer activations
+        for(int i = 0; i < nextLayerSize; i ++)
+        {   //loop through each node in next layer
+
+            //set bias input to 1
+            int biasNodeNumber = 0; //bias is the first neuron in each layer
+            neuronActivations.at(layerCount).at(biasNodeNumber) = 1.0; //bias going from this layer to next is 1 for each next layer neuron
+
+            vector <double> neuronInputSum(layerSizes.at(layerCount + 1), 0.0);
+
+            for(int j = 0; j < currentLayerSize; j ++)
+            {   //loop through each node to sum up values feeding into next layer node
+                neuronInputSum.at(i) += (neuronActivations.at(layerCount).at(j) * weights.at(layerCount).at(j).at(i));
+            }
+
+            //apply sigmoid function
+            neuronActivations.at(layerCount + 1).at(i) = 1 / (1 + pow(2.718282, -1 * neuronInputSum.at(i)));
+        }
+    }
+    //feed forward through the neural network and record the activations for each layer
+
+    return 0;
+}
+
+double NNgradient(vector<int> &layerSizes, vector<double> &inputLayer, vector< vector< vector<double> > > &weightGradientMatrix, vector< vector< vector<double> > > &weights, vector< vector<double> > &neuronActivations, vector<double> &targets)
+{   //NNgradient calculates the gradient of all weights for a square cost function and stores these in a vector 'weightGradientMatrix'. The square of the error is also returned
+    int numberOfLayers = layerSizes.size();
+
+    //find the error term for each neuron in the final (output) layer
+    int outputLayerLength = layerSizes.at(numberOfLayers - 1);
+    int maximumLayerSize = 0; //max_element(layerSizes.begin(), layerSizes.end());
+    for(int i = 0; i < numberOfLayers; i ++)
+    {
+        if(layerSizes.at(i) > maximumLayerSize)
+        {
+            maximumLayerSize = layerSizes.at(i);
+        }
+    }
+
+    vector< vector< double > > errorTerms (numberOfLayers, vector<double> (maximumLayerSize, 0.0)); //these are commonly referred to as delta in neural network notation
+    vector<double> derivatives(maximumLayerSize, 0.0); //derivatives of the activation (derivative of sigmoid function)
+
+    double squaredError = 0;
+
+    for(int i = 0; i < outputLayerLength; i ++)
+    {
+        //find the derivative of the sigmoid function to feed into the chain rule
+        derivatives.at(i) = neuronActivations.at(numberOfLayers - 1).at(i) * (1 - neuronActivations.at(numberOfLayers - 1).at(i));
+
+        //find the error terms for the output layer
+        errorTerms.at(numberOfLayers - 1).at(i) = (neuronActivations.at(numberOfLayers - 1).at(i) - targets.at(i)) * derivatives.at(i);
+
+        //find the squared error
+        squaredError += pow((neuronActivations.at(numberOfLayers - 1).at(i) - targets.at(i)), 2.0);
+    }
+
+    //backpropagate to find error terms in prior layers
+    for(int layerCount = (numberOfLayers - 1); layerCount > 0; layerCount --)
+    {
+        int currentLayerSize = layerSizes.at(layerCount);
+        int previousLayerSize = layerSizes.at(layerCount - 1);
+        for(int i = 0; i < previousLayerSize; i ++)
+        {
+            derivatives.at(i) = neuronActivations.at(layerCount - 1).at(i) * (1 - neuronActivations.at(layerCount -1).at(i));
+            for(int j = 0; j < currentLayerSize; j ++)
+            {
+                errorTerms.at(layerCount - 1).at(i) += derivatives.at(i) * (errorTerms.at(layerCount - 1).at(i) * weights.at(layerCount - 1).at(i).at(j));
+            }
+        }
+    }
+
+    //calculate gradients
+    for(int layerCount = 0; layerCount < (numberOfLayers - 1); layerCount ++)
+    {
+        int currentLayerSize = layerSizes.at(layerCount);
+        int nextLayerSize = layerSizes.at(layerCount + 1);
+        for(int i = 0; i < currentLayerSize; i ++)
+        {
+            for(int j = 0; j < nextLayerSize; j ++)
+            {
+                weightGradientMatrix.at(layerCount).at(i).at(j) = (neuronActivations.at(layerCount).at(i) * (errorTerms.at(layerCount + 1).at(j)));
+            }
+        }
+    }
+
+    return squaredError;
+}
+
+int pickBatchRefNumbers(int trainingSampleNumbers[], int miniBatchSize, int trainingDataSize)
+{   //pickBatchRefNumbers selects the reference numbers of data which will be used for the mini batch training
+    trainingSampleNumbers[miniBatchSize] = {-1};
+
+    std::uniform_int_distribution<int> uniformRefs(0, trainingDataSize - 1);
+
+    for(int i = 0; i < miniBatchSize; i ++)
+    {//pick a player at random, if they have not already been chosen then add them to the list of playerNumbers
+        int refNumber = uniformRefs(generator);
+        int uniqueRefNumber = 1;
+        for(int j = 0; j < i; j ++)
+        {//check if this sample reference number is unique
+            if(refNumber == trainingSampleNumbers[j])
+            {//if true the reference number was not unique and a new one must be generated
+                uniqueRefNumber = 0;
+                j = miniBatchSize;
+                i --; //reduce i to repeat the selection for this player
+            }
+        }
+        if(uniqueRefNumber == 1)
+        {//if unique add the ref number to the list
+            trainingSampleNumbers[i] = refNumber;
+        }
+    }
+
+    return 0;
+}
+
+int createMiniBatch(int miniBatchSize, vector<int> &layerSizes, vector< vector<double> > &allInputLayers, vector< vector<double> > &allTargets, vector< vector<double> > &batchInputLayers, vector< vector<double> > &batchTargets)
+{   //createMiniBatch takes samples from allInputLayers and allTargets to fill vectors batchInputLayers and batchTargets
+    int trainingDataSize = allInputLayers.size();
+    int trainingSampleNumbers[miniBatchSize];
+
+    //pick random samples from all training data
+    pickBatchRefNumbers(trainingSampleNumbers, miniBatchSize, trainingDataSize);
+
+    //fill training vectors for this batch
+    int inputLayerLength = layerSizes.at(0);
+    int numberOfLayers = layerSizes.size();
+    int outputLayerLength = layerSizes.at(numberOfLayers - 1);
+    for(int i = 0; i < miniBatchSize; i ++)
+    {
+        int trainingRefNumber = trainingSampleNumbers[i];
+        for(int j = 0; j < inputLayerLength; j ++)
+        {
+            batchInputLayers.at(i).at(j) = allInputLayers.at(trainingRefNumber).at(j);
+        }
+        for(int j = 0; j < outputLayerLength; j ++)
+        {
+            batchTargets.at(i).at(j) = allTargets.at(trainingRefNumber).at(j);
+        }
+    }
+
+    return 0;
+}
+
+double doMiniBatch(int miniBatchSize, vector<int> &layerSizes, vector< vector<double> > &inputLayers, vector< vector< vector<double> > > &averageGradientMatrix, vector< vector< vector<double> > > &weights, vector< vector<double> > &targets)
+{   //doMiniBatch modifies the averageGradientMatrix and returns the average squared error of the batch
+    int numberOfLayers = layerSizes.size();
+    int inputLayerLength = layerSizes.at(0);
+    int outputLayerLength = layerSizes.at(numberOfLayers - 1);
+
+    vector<double> trainingInputLayer(inputLayerLength); //the input layer for a single training example
+    vector<double> trainingTargets(outputLayerLength); //the targets for a single training example
+    //find the maximum layer size
+    int maximumLayerSize = 0; //max_element(layerSizes.begin(), layerSizes.end());
+    for(int i = 0; i < numberOfLayers; i ++)
+    {
+        if(layerSizes.at(i) > maximumLayerSize)
+        {
+            maximumLayerSize = layerSizes.at(i);
+        }
+    }
+
+    vector< vector< vector<double> > > sumGradientMatrix;
+    averageGradientMatrix.resize(numberOfLayers, vector<vector<double> >(maximumLayerSize, vector<double>(maximumLayerSize)));
+    sumGradientMatrix.resize(numberOfLayers, vector<vector<double> >(maximumLayerSize, vector<double>(maximumLayerSize)));
+
+    double squaredError = 0;
+    double sumSquaredError = 0;
+
+    targets.resize( miniBatchSize , vector<double>( outputLayerLength) );
+
+    for(int batchCount = 0; batchCount < miniBatchSize; batchCount ++)
+    {
+        //get single training target and training inputs
+        for(int i = 0; i < inputLayerLength; i ++)
+        {
+            trainingInputLayer.at(i) = inputLayers.at(batchCount).at(i);
+        }
+
+        for(int i = 0; i < outputLayerLength; i ++)
+        {
+            trainingTargets.at(i) = targets.at(batchCount).at(i);
+        }
+
+        //feed forward the training inputs
+        vector< vector<double> > neuronActivations (numberOfLayers, vector<double> (maximumLayerSize, 0.0));
+        NNFeedForward(layerSizes, trainingInputLayer, weights, neuronActivations);
+
+        //find gradient matrix for this set of inputs/targets
+        vector< vector< vector<double> > > gradientMatrix(numberOfLayers, vector< vector<double> > (maximumLayerSize, vector<double> (maximumLayerSize)));
+
+        squaredError = NNgradient(layerSizes, trainingInputLayer, gradientMatrix, weights, neuronActivations, trainingTargets);
+
+        //add on this gradient to the others in this batch
+        for(int i = 0; i < numberOfLayers - 1; i ++)
+        {
+            for(int j = 0; j < layerSizes.at(i); j ++)
+            {
+                for(int k = 0; k < layerSizes.at(i + 1); k ++)
+                {
+                    sumGradientMatrix.at(i).at(j).at(k) += gradientMatrix.at(i).at(j).at(k);
+                }
+            }
+        }
+
+        //add squared error onto running total squared error
+        sumSquaredError += squaredError;
+    }
+
+    //compute average gradients and squared error
+    double miniBatchSizeDouble = miniBatchSize;
+
+    for(int i = 0; i < (numberOfLayers - 1); i++)
+    {
+        for(int j = 0; j < layerSizes.at(i); j++)
+        {
+            for(int k = 0; k < layerSizes.at(i + 1); k++)
+            {
+                averageGradientMatrix.at(i).at(j).at(k) = (sumGradientMatrix.at(i).at(j).at(k) / miniBatchSizeDouble);
+            }
+        }
+    }
+
+    double averageSquaredError = (sumSquaredError / miniBatchSizeDouble);
+
+    return averageSquaredError;
+}
+
+int trainWeights(double learningRate, int miniBatchSize, int numberUpdates, int totalDataSize, vector<int> &layerSizes, vector< vector< vector<double> > > &weights)
+{   //trainWeights takes all training samples, creates a batch and updates weights using gradient descent
+
+    int numberOfLayers = layerSizes.size();
+    int numberInputs = layerSizes.at(0);
+    int numberOutputs = layerSizes.at(numberOfLayers - 1);
+
+    //find the maximum layer size
+    int maximumLayerSize = 0; //max_element(layerSizes.begin(), layerSizes.end());
+    for(int i = 0; i < numberOfLayers; i ++)
+    {
+        if(layerSizes.at(i) > maximumLayerSize)
+        {
+            maximumLayerSize = layerSizes.at(i);
+        }
+    }
+
+    //save all training data inputs into a vector
+    vector< vector< double > > allInputLayers (totalDataSize, vector<double> (numberInputs, 0.0));
+
+    vector< vector<double> > batchInputLayers(miniBatchSize, vector<double> (numberInputs, 0.0));
+
+    //save all training data target outputs into a vector
+    vector< vector< double > > allTargets (totalDataSize, vector<double> (numberOutputs, 0.0));
+
+    vector< vector<double> > batchTargets(miniBatchSize, vector<double> (numberOutputs, 0.0));
+
+    ///string testDataFileName = "trainingData.txt";
+    ///ifstream testDataFile(testDataFileName.c_str() );
+    ifstream testDataFile("trainingData.txt");
+
+    for(int i = 0; i < totalDataSize; i ++)
+    {
+        for(int j = 0; j < (numberInputs + numberOutputs); j ++)
+        {
+            if(j < numberInputs)
+            {
+                testDataFile >> allInputLayers.at(i).at(j);
+            }
+            else
+            {
+                testDataFile >> allTargets.at(i).at(j - numberInputs);
+            }
+        }
+    }
+
+    for(int updateCount = 0; updateCount < numberUpdates; updateCount ++)
+    {
+        //create a mini batch
+        ///code for creating mini batch of inputs and targets
+        ///miniBatchInputLayers = ?
+        ///miniBatchTargets = ?
+        //create a mini batch of data to train from
+        createMiniBatch(miniBatchSize, layerSizes, allInputLayers, allTargets, batchInputLayers, batchTargets);
+
+
+        vector< vector< vector<double> > > averageGradientMatrix(numberOfLayers, vector< vector<double> >(maximumLayerSize, vector<double>(maximumLayerSize)));
+
+        double meanSquaredError = doMiniBatch(miniBatchSize, layerSizes, batchInputLayers, averageGradientMatrix, weights, batchTargets);
+
+        cout << "MSE is " << meanSquaredError << "\t" << "update number " << updateCount << endl;
+
+        for(int i = 0; i < (numberOfLayers -1); i++)
+        {
+            for(int j = 0; j < layerSizes.at(i); j++)
+            {
+                for(int k = 0; k < layerSizes.at(i + 1); k++)
+                {
+                    weights[i][j][k] -= (learningRate * averageGradientMatrix.at(i).at(j).at(k));
+                }
+            }
+        }
+    }
+    return 0;
+}
 
 int main()
 {
+    vector<int> layerSizes(3);
+    layerSizes[0] = 3;
+    layerSizes[1] = 5;
+    layerSizes[2] = 1;
+    int miniBatchSize = 3;
+
+    int maximumLayerSize = 5;
+
+    vector< vector< vector<double> > > weights (3, vector< vector<double> >(maximumLayerSize, vector <double>(maxLayerSize,0.0)));
+
+    std::normal_distribution<double> normaldistribution(0, 0.1);
+
+    /*
+    Parameters for genetic algorithm for future use
     int learnFromScratch = 0; //if learnFromScratch is 1 the files containing gene weights are assumed to be empty. If 0 then exiting genetic information in files is used
-    int minNumberTrials = 6400; //the minimum number of hands each gene must play to estimate their performance32
+    int minNumberTrials = 800; //the minimum number of hands each gene must play to estimate their performance
     double crossoverRate = 0.5, minMutationRate = 0.05, maxMutationRate = 0.3;
     int numberGenerations = 1, epochLength = 1;
     float minChips = 10, maxChips = 200; //the range of chips (relative to big blind) which players can have in a game
     int bigBlind = 100;
     int layerSizes[numberLayers] = {inputLayerSize, hiddenLayerSize, outputLayerSize, 1};
-    ///int oldLayerSizes[numberLayers] = {12, 9, 3, 1};
 
-    ///addNewWeights(layerSizes, oldLayerSizes, numberLayers);
+    ///doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
 
-    //if the algorithm is learning from scratch create the files storing player information
-    if(learnFromScratch == 1)
-    {
-        cout << "Warning! Previous genetic weights are to be deleted" << endl;
-        cout << "Enter anything to overwrite neural network weights and continue" << endl;
-        string temp;
-        cin >> temp;
-        createGeneFiles(layerSizes);
-    }
-
-    ///line 3379 updating genes is commented out for testing
-    doGeneticAlgorithm(numberGenerations, epochLength, minNumberTrials, crossoverRate, minMutationRate, maxMutationRate, bigBlind, minChips, maxChips, layerSizes);
-
-    ///saveBestGenes(3200, 10, 0, bigBlind, minChips, maxChips, layerSizes);
-
-    ///int playerRefNumbers[maxPlayers] = {0,3,12,42,-1,0,0,0};
-    ///playAgainstAI(playerRefNumbers, "Hugh", 1, 20, layerSizes);
+    */
 
     return 0;
 }
